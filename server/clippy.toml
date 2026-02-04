@@ -1,0 +1,26 @@
+# Clippy configuration file
+# See https://doc.rust-lang.org/clippy/lint_configuration.html
+
+# Warn on all clippy lints by default
+# You can customize specific lints below
+
+# Maximum cognitive complexity before warning
+cognitive-complexity-threshold = 30
+
+# Disallowed methods (add methods you want to ban)
+disallowed-methods = []
+
+# Disallowed types (add types you want to ban)
+disallowed-types = []
+
+# Too many arguments threshold
+too-many-arguments-threshold = 7
+
+# Type complexity threshold
+type-complexity-threshold = 250
+
+# Single char binding names to allow
+single-char-binding-names-threshold = 4
+
+# Array size threshold for passing arrays by reference
+array-size-threshold = 512000
