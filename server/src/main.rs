@@ -6,7 +6,11 @@ use axum::{
     routing::{get, post},
 };
 
-use utoipa::OpenApi;
+use tower_http::cors::{Any, CorsLayer};
+
+use serde::Deserialize;
+
+use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
@@ -18,10 +22,22 @@ use utoipa_swagger_ui::SwaggerUi;
 )]
 struct ApiDoc;
 
+/// Just a schema for axum native multipart
+#[derive(Deserialize, ToSchema)]
+#[allow(unused)]
+struct UploadForm {
+    #[schema(format = Binary, content_media_type = "application/octet-stream")]
+    file: String,
+}
+
 #[tokio::main]
 async fn main() {
-    let app = route_builder();
-
+    // 1. Define your CORS policy
+    let cors = CorsLayer::new()
+        .allow_origin(Any) // For debugging. In production, use "http://example.com".parse().unwrap()
+        .allow_methods(Any)
+        .allow_headers(Any);
+    let app = route_builder().layer(cors);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
     println!("Server running on http://localhost:3000");
@@ -108,7 +124,7 @@ async fn create_folder(
     params(
         ("path" = String, Path, description = "Target folder path")
     ),
-    request_body(content = String, description = "File to upload", content_type = "multipart/form-data"),
+    request_body(content = UploadForm, content_type = "multipart/form-data"),
     responses(
         (status = 200, description = "File uploaded successfully", body = String),
         (status = 400, description = "Bad request"),
@@ -133,7 +149,14 @@ async fn upload_file(
 
         let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        let file_path = format!("{}/{}", path, file_name);
+        let folder_path = &path;
+        let file_path = format!("{}/{}", folder_path, file_name);
+
+        // Create the folder if it doesn't exist (does nothing if it already exists)
+        tokio::fs::create_dir_all(folder_path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
         tokio::fs::write(&file_path, &data)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -144,7 +167,11 @@ async fn upload_file(
     if uploaded_files.is_empty() {
         Err(StatusCode::BAD_REQUEST)
     } else {
-        Ok(Json(format!("Uploaded {} file(s): {}", uploaded_files.len(), uploaded_files.join(", "))))
+        Ok(Json(format!(
+            "Uploaded {} file(s): {}",
+            uploaded_files.len(),
+            uploaded_files.join(", ")
+        )))
     }
 }
 
