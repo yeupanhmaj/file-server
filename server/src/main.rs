@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Multipart, Path},
+    extract::Multipart,
     http::{StatusCode, header},
     response::Response,
     routing::{get, post},
@@ -8,7 +8,7 @@ use axum::{
 
 use tower_http::cors::{Any, CorsLayer};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
@@ -22,12 +22,26 @@ use utoipa_swagger_ui::SwaggerUi;
 )]
 struct ApiDoc;
 
-/// Just a schema for axum native multipart
+/// Schema for file upload multipart form
 #[derive(Deserialize, ToSchema)]
 #[allow(unused)]
-struct UploadForm {
+struct UploadFileRequest {
+    /// Target folder path where files will be uploaded
+    path: String,
+    /// File(s) to upload
     #[schema(format = Binary, content_media_type = "application/octet-stream")]
     file: String,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+struct CreateFolderRequest {
+    path: String,
+    folder_name: String,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+struct DownloadFileRequest {
+    file_path: String,
 }
 
 #[tokio::main]
@@ -58,9 +72,9 @@ async fn shutdown_signal() {
 fn route_builder() -> Router {
     Router::new()
         .route("/api/ls", get(get_list_file_and_folder))
-        .route("/api/mkdir/:path/:folder_name", post(create_folder))
-        .route("/api/upload/:path", post(upload_file))
-        .route("/api/download/:path/:file_name", get(download_file))
+        .route("/api/mkdir", post(create_folder))
+        .route("/api/upload", post(upload_file))
+        .route("/api/download", post(download_file))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
 }
 
@@ -98,20 +112,15 @@ async fn get_list_file_and_folder() -> Result<Json<Vec<String>>, StatusCode> {
 
 #[utoipa::path(
     post,
-    path = "/api/mkdir/{path}/{folder_name}",
-    params(
-        ("path" = String, Path, description = "Base path"),
-        ("folder_name" = String, Path, description = "Folder name to create")
-    ),
+    path = "/api/mkdir",
+    request_body = CreateFolderRequest,
     responses(
         (status = 200, description = "Folder created successfully", body = String),
         (status = 500, description = "Internal server error")
     )
 )]
-async fn create_folder(
-    Path((path, folder_name)): Path<(String, String)>,
-) -> Result<Json<String>, StatusCode> {
-    tokio::fs::create_dir(format!("{}/{}", path, folder_name))
+async fn create_folder(Json(req): Json<CreateFolderRequest>) -> Result<Json<String>, StatusCode> {
+    tokio::fs::create_dir(format!("{}/{}", req.path, req.folder_name))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -120,28 +129,32 @@ async fn create_folder(
 
 #[utoipa::path(
     post,
-    path = "/api/upload/{path}",
-    params(
-        ("path" = String, Path, description = "Target folder path")
-    ),
-    request_body(content = UploadForm, content_type = "multipart/form-data"),
+    path = "/api/upload",
+    request_body(content = UploadFileRequest, content_type = "multipart/form-data"),
     responses(
         (status = 200, description = "File uploaded successfully", body = String),
         (status = 400, description = "Bad request"),
         (status = 500, description = "Internal server error")
     )
 )]
-async fn upload_file(
-    Path(path): Path<String>,
-    mut multipart: Multipart,
-) -> Result<Json<String>, StatusCode> {
+async fn upload_file(mut multipart: Multipart) -> Result<Json<String>, StatusCode> {
     let mut uploaded_files = Vec::new();
+    let mut folder_path = String::new();
 
     while let Some(field) = multipart
         .next_field()
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?
     {
+        let field_name = field.name().unwrap_or("").to_string();
+
+        // Handle the "path" field
+        if field_name == "path" {
+            folder_path = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            continue;
+        }
+
+        // Handle file fields
         let file_name = field
             .file_name()
             .ok_or(StatusCode::BAD_REQUEST)?
@@ -149,11 +162,10 @@ async fn upload_file(
 
         let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        let folder_path = &path;
         let file_path = format!("{}/{}", folder_path, file_name);
 
         // Create the folder if it doesn't exist (does nothing if it already exists)
-        tokio::fs::create_dir_all(folder_path)
+        tokio::fs::create_dir_all(&folder_path)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -176,22 +188,17 @@ async fn upload_file(
 }
 
 #[utoipa::path(
-    get,
-    path = "/api/download/{path}/{file_name}",
-    params(
-        ("path" = String, Path, description = "Folder path"),
-        ("file_name" = String, Path, description = "File name to download")
-    ),
+    post,
+    path = "/api/download",
+    request_body = DownloadFileRequest,
     responses(
         (status = 200, description = "File content", content_type = "application/octet-stream"),
         (status = 404, description = "File not found"),
         (status = 500, description = "Internal server error")
     )
 )]
-async fn download_file(
-    Path((path, file_name)): Path<(String, String)>,
-) -> Result<Response, StatusCode> {
-    let file_path = format!("{}/{}", path, file_name);
+async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Response, StatusCode> {
+    let file_path = format!("{}", req.file_path);
 
     let contents = tokio::fs::read(&file_path).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
@@ -206,10 +213,12 @@ async fn download_file(
         .header(header::CONTENT_TYPE, "application/octet-stream")
         .header(
             header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{}\"", file_name),
+            format!("attachment; filename=\"{}\"", req.file_path),
         )
         .body(axum::body::Body::from(contents))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(response)
 }
+
+async fn delete() {}
