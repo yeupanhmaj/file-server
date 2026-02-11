@@ -1,21 +1,25 @@
+use crate::models::{DeleteFileRequest, DownloadFileRequest, GetListFileAndFolderRequest};
 use axum::{
     Json,
     extract::Multipart,
     http::{StatusCode, header},
     response::Response,
 };
-use crate::models::{DownloadFileRequest, DeleteFileRequest};
 
 #[utoipa::path(
-    get,
+    post,
     path = "/api/ls",
+    request_body(content = crate::models::GetListFileAndFolderRequest, content_type = "application/json"),
     responses(
         (status = 200, description = "List of files and folders", body = Vec<String>),
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn get_list_file_and_folder() -> Result<Json<Vec<String>>, StatusCode> {
-    let mut entries = tokio::fs::read_dir(".")
+pub async fn get_list_file_and_folder(
+    Json(req): Json<GetListFileAndFolderRequest>,
+) -> Result<Json<Vec<String>>, StatusCode> {
+    let root = req.path.clone().unwrap_or_else(|| ".".to_string());
+    let mut entries = tokio::fs::read_dir(&root)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut items = Vec::new();
@@ -109,7 +113,7 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<String>, Statu
     )
 )]
 pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Response, StatusCode> {
-    let file_path = format!("{}", req.file_path);
+    let file_path = &req.file_path;
 
     let contents = tokio::fs::read(&file_path).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {

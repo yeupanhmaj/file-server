@@ -2,22 +2,19 @@ mod api_doc;
 mod handlers;
 mod models;
 
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::{Router, routing::post};
 use tower_http::cors::{Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
 use handlers::{
-    create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder, upload_file,
+    create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder, search_files, upload_file,
 };
 
 #[tokio::main]
 async fn main() {
-    // 1. Define your CORS policy
+    // Define your CORS policy
     let cors = CorsLayer::new()
         .allow_origin(Any) // For debugging. In production, use "http://example.com".parse().unwrap()
         .allow_methods(Any)
@@ -42,8 +39,9 @@ async fn shutdown_signal() {
 
 fn route_builder() -> Router {
     Router::new()
-        .route("/api/ls", get(get_list_file_and_folder))
+        .route("/api/ls", post(get_list_file_and_folder))
         .route("/api/mkdir", post(create_folder))
+        .route("/api/search", post(search_files))
         .route("/api/upload", post(upload_file))
         .route("/api/download", post(download_file))
         .route("/api/delete", post(delete_file))

@@ -21,7 +21,7 @@
 {#await ls}
 	<p>Loading...</p>
 {:then values}
-	{#each values as value}
+	{#each values as value (value)}
 		{@const item = parseEntry(value)}
 		<p>
 			{#if item.type === 'DIR'}
