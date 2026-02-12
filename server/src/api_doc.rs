@@ -10,6 +10,7 @@ use utoipa::OpenApi;
         crate::handlers::file::upload_file,
         crate::handlers::file::download_file,
         crate::handlers::file::delete_file,
+        crate::handlers::folder::sorted_list_file_and_folder
     ),
     components(
         schemas(
@@ -19,6 +20,7 @@ use utoipa::OpenApi;
             crate::models::UploadFileRequest,
             crate::models::DownloadFileRequest,
             crate::models::DeleteFileRequest,
+            crate::models::SortOptionRequest
         )
     ),
     tags(

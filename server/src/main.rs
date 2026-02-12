@@ -9,7 +9,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
 use handlers::{
-    create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder, search_files, upload_file,
+    create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder,
+    search_files, sorted_list_file_and_folder, upload_file,
 };
 
 #[tokio::main]
@@ -42,6 +43,7 @@ fn route_builder() -> Router {
         .route("/api/ls", post(get_list_file_and_folder))
         .route("/api/mkdir", post(create_folder))
         .route("/api/search", post(search_files))
+        .route("/api/sort", post(sorted_list_file_and_folder))
         .route("/api/upload", post(upload_file))
         .route("/api/download", post(download_file))
         .route("/api/delete", post(delete_file))

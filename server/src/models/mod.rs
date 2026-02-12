@@ -44,3 +44,8 @@ pub struct RenameFolderRequest {
 pub struct SearchRequest {
     pub query: String,
 }
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct SortOptionRequest {
+    pub option: Option<String>,
+}
