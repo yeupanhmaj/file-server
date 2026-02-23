@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Server",
+      "type": "shell",
+      "command": "cd server; cargo run",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*?error.*?$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*?Compiling.*?$",
+          "endsPattern": "^.*?Finished.*?$"
+        }
+      }
+    },
+    {
+      "label": "Run Client",
+      "type": "shell",
+      "command": "cd client; npm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*error.*$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*vite.*$",
+          "endsPattern": "^.*Local:.*$"
+        }
+      }
+    },
+    {
+      "label": "Run Server and Client",
+      "dependsOn": ["Run Server", "Run Client"],
+      "problemMatcher": []
+    }
+  ]
+}

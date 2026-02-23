@@ -42,7 +42,8 @@ pub struct RenameFolderRequest {
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct SearchRequest {
-    pub query: String,
+    pub search_string: String,
+    pub path: String,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]

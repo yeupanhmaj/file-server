@@ -47,13 +47,35 @@ pub async fn rename_folder(
     path = "/api/search",
     request_body = SearchRequest,
     responses(
-        (status = 200, description = "File search results", body = String),
+        (status = 200, description = "File search results", body = Vec<String>),
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn search_files(Json(_req): Json<SearchRequest>) -> Result<Json<String>, StatusCode> {
-    // Implement the search functionality here
-    Ok(Json("Search results".to_string()))
+pub async fn search_files(Json(req): Json<SearchRequest>) -> Result<Json<Vec<String>>, StatusCode> {
+    let mut entries = tokio::fs::read_dir(&req.path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut results = Vec::new();
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        let entry_path = entry.path();
+        if entry_path.to_str() == Some(&req.search_string) {
+            let display_path = entry_path.display().to_string();
+
+            if entry_path.is_dir() {
+                results.push(format!("[DIR] {}", display_path));
+            } else {
+                results.push(format!("[FILE] {}", display_path));
+            }
+        }
+    }
+
+    Ok(Json(results))
 }
 
 #[utoipa::path(

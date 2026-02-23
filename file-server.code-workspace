@@ -1,0 +1,26 @@
+{
+  "folders": [
+    {
+      "name": "file-server-server",
+      "path": "server"
+    },
+    {
+      "name": "file-server-client",
+      "path": "client"
+    },
+    {
+      "name": "file-server-root",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "rust-analyzer.linkedProjects": ["./Cargo.toml"],
+    "[rust]": {
+      "editor.defaultFormatter": "rust-lang.rust-analyzer",
+      "editor.formatOnSave": true
+    },
+    "chat.tools.terminal.autoApprove": {
+      "npm audit": true
+    }
+  }
+}
