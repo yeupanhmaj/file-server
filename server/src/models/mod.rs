@@ -7,6 +7,15 @@ pub struct GetListFileAndFolderRequest {
     pub path: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct FileSystemItem {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub item_type: String,
+    pub modified: String,
+    pub size: String,
+}
+
 /// Schema for file upload multipart form
 #[derive(Deserialize, ToSchema)]
 #[allow(unused)]

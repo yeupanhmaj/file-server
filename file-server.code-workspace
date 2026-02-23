@@ -21,6 +21,10 @@
     },
     "chat.tools.terminal.autoApprove": {
       "npm audit": true
-    }
+    },
+    "files.exclude": {
+      "client": true,
+      "server": true
+    },
   }
 }

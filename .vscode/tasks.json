@@ -23,8 +23,14 @@
     {
       "label": "Run Client",
       "type": "shell",
-      "command": "cd client; npm run dev",
+      "command": "source ~/.nvm/nvm.sh && cd client && npm run dev",
       "isBackground": true,
+      "options": {
+        "shell": {
+          "executable": "/bin/bash",
+          "args": ["-l", "-c"]
+        }
+      },
       "problemMatcher": {
         "pattern": {
           "regexp": "^.*error.*$",

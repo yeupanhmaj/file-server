@@ -1,6 +1,7 @@
 mod api_doc;
 mod endpoints;
 mod models;
+mod utils;
 
 use axum::{routing::post, Router};
 use tower_http::cors::{Any, CorsLayer};
