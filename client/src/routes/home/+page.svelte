@@ -1,12 +1,10 @@
 <script lang="ts">
+	import { GridView, ListView } from '$lib';
 	import { Grid, List } from 'carbon-icons-svelte';
-	import ListView from '$lib/components/ListView.svelte';
-	import GridView from '$lib/components/GridView.svelte';
 
 	let viewMode = $state<'grid' | 'list'>('list');
 
 	// Sample hierarchical data for tree view
-
 	// Sample flat data for list/grid views
 	const files = [
 		{ id: 1, name: 'Documents', type: 'folder', modified: '2024-02-20', size: '-' },

@@ -75,18 +75,6 @@
 					<Folder size={20} />
 					<span>My Drive</span>
 				</a>
-				<a href="/shared" class="nav-item" class:active={isActive('/shared')}>
-					<UserAvatar size={20} />
-					<span>Shared with me</span>
-				</a>
-				<a href="/recent" class="nav-item" class:active={isActive('/recent')}>
-					<Time size={20} />
-					<span>Recent</span>
-				</a>
-				<a href="/starred" class="nav-item" class:active={isActive('/starred')}>
-					<Star size={20} />
-					<span>Starred</span>
-				</a>
 				<a href="/trash" class="nav-item" class:active={isActive('/trash')}>
 					<TrashCan size={20} />
 					<span>Trash</span>

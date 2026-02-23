@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Folder, FolderOpen, ChevronRight, ChevronDown } from 'carbon-icons-svelte';
-	import TreeView from './TreeView.svelte';
+	import { TreeView } from '$lib/components';
 
 	interface TreeNode {
 		id: string | number;
@@ -75,7 +75,7 @@
 			</button>
 
 			{#if node.type === 'folder' && hasChildren(node) && isExpanded(node.id)}
-			<TreeView nodes={node.children || []} level={level + 1} {onNodeClick} {selectedId} />
+				<TreeView nodes={node.children || []} level={level + 1} {onNodeClick} {selectedId} />
 			{/if}
 		</div>
 	{/each}
