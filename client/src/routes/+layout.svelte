@@ -16,6 +16,7 @@
 	import { page } from '$app/stores';
 
 	import favicon from '$lib/assets/favicon.svg';
+	import { Divider } from '$lib';
 
 	let { children } = $props();
 	let searchQuery = $state('');
@@ -81,8 +82,7 @@
 				</a>
 			</nav>
 
-			<div class="sidebar-divider"></div>
-
+			<Divider />
 			<div class="storage-info">
 				<SettingsAdjust size={20} />
 				<div class="storage-text">
@@ -269,12 +269,6 @@
 	.nav-item.active {
 		background-color: #e8f0fe;
 		color: #1967d2;
-	}
-
-	.sidebar-divider {
-		height: 1px;
-		background-color: #e0e0e0;
-		margin: 16px 0;
 	}
 
 	.storage-info {

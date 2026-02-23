@@ -1,14 +1,14 @@
 mod api_doc;
-mod handlers;
+mod endpoints;
 mod models;
 
-use axum::{Router, routing::post};
+use axum::{routing::post, Router};
 use tower_http::cors::{Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
-use handlers::{
+use endpoints::{
     create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder,
     search_files, sorted_list_file_and_folder, upload_file,
 };

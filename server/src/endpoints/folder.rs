@@ -1,5 +1,5 @@
-use crate::models::{CreateFolderRequest, RenameFolderRequest, SearchRequest, SortOptionRequest};
-use axum::{Json, http::StatusCode};
+use crate::models::{CreateFolderRequest, RenameFolderRequest, SearchRequest};
+use axum::{http::StatusCode, Json};
 
 #[utoipa::path(
     post,
