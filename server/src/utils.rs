@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use std::fs;
 use std::path::PathBuf;
 
 /// Get the base directory for file operations
@@ -7,6 +8,21 @@ pub fn get_base_directory() -> PathBuf {
     std::env::var("FILE_SERVER_ROOT")
         .unwrap_or_else(|_| "./shared".to_string())
         .into()
+}
+
+/// Get the trash directory path
+pub fn get_trash_directory() -> PathBuf {
+    get_base_directory().join(".trash")
+}
+
+/// Initialize trash directory on application startup
+pub fn init_trash_directory() -> std::io::Result<()> {
+    let trash_dir = get_trash_directory();
+    if !trash_dir.exists() {
+        fs::create_dir_all(&trash_dir)?;
+        println!("✅ Created trash directory at: {}", trash_dir.display());
+    }
+    Ok(())
 }
 
 /// Validates and resolves a path to ensure it's within the base directory

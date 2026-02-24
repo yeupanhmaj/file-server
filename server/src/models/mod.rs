@@ -59,3 +59,17 @@ pub struct SearchRequest {
 pub struct SortOptionRequest {
     pub option: Option<String>,
 }
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct RestoreFileRequest {
+    pub trash_item_id: String,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct TrashItem {
+    pub id: String,
+    pub original_path: String,
+    pub name: String,
+    pub deleted_at: String,
+    pub size: String,
+}

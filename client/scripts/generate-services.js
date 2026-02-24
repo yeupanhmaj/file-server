@@ -142,8 +142,10 @@ function mapHandlersToTypes() {
 				continue;
 			}
 			
-			// Try to find Json<Type>
-			const jsonMatch = lookAhead.match(/Json<([^>]+)>/);
+			// Try to find Json<Type> in function parameters (before -> return)
+			// Match only parameters, not return types
+			const paramsSection = lookAhead.split('->')[0]; // Get everything before return type
+			const jsonMatch = paramsSection.match(/Json<([^>]+)>/);
 			if (jsonMatch) {
 				// Extract clean type name
 				const typeName = jsonMatch[1].trim();
@@ -174,7 +176,15 @@ function mapHandlersToTypes() {
 
 // Classify endpoints into file or folder services
 function classifyEndpoint(handlerName) {
-	const fileHandlers = ['upload_file', 'download_file', 'delete_file', 'get_list_file_and_folder'];
+	const fileHandlers = [
+		'upload_file',
+		'download_file', 
+		'delete_file',
+		'get_list_file_and_folder',
+		'list_trash',
+		'restore_file',
+		'empty_trash'
+	];
 	const folderHandlers = ['create_folder', 'rename_folder', 'search_files', 'sorted_list_file_and_folder'];
 
 	if (fileHandlers.includes(handlerName)) return 'file';
@@ -236,9 +246,15 @@ function generateServiceMethods(routes, handlerTypes, returnTypes) {
 		}
 		// Handle GET requests (no request body)
 		else if (method === 'GET') {
-			methodCode = `	async ${methodName}(params?: ${requestType || 'Record<string, unknown>'}) {
+			if (requestType && requestType !== 'unknown') {
+				methodCode = `	async ${methodName}(params?: ${requestType}) {
 		return this.get<${returnType}>('${path}', { params });
 	}`;
+			} else {
+				methodCode = `	async ${methodName}() {
+		return this.get<${returnType}>('${path}');
+	}`;
+			}
 		}
 		// Handle DELETE requests
 		else if (method === 'DELETE') {
@@ -254,9 +270,16 @@ function generateServiceMethods(routes, handlerTypes, returnTypes) {
 		}
 		// Handle POST/PUT/PATCH with request body
 		else {
-			methodCode = `	async ${methodName}(request: ${requestType}) {
+			if (requestType && requestType !== 'unknown') {
+				methodCode = `	async ${methodName}(request: ${requestType}) {
 		return this.${httpMethod}<${returnType}>('${path}', request);
 	}`;
+			} else {
+				// POST without body (like empty_trash)
+				methodCode = `	async ${methodName}() {
+		return this.${httpMethod}<${returnType}>('${path}');
+	}`;
+			}
 		}
 
 		if (category === 'file') {
@@ -302,11 +325,14 @@ function main() {
 		const category = classifyEndpoint(handlerName);
 
 		// Add request types
-		if (requestType && requestType !== 'FormData') {
-			if (category === 'file') {
-				fileServiceTypes.add(requestType);
-			} else {
-				folderServiceTypes.add(requestType);
+		if (requestType && requestType !== 'FormData' && requestType !== 'unknown') {
+			// Filter out invalid types (Vec<...>, primitives)
+			if (!requestType.startsWith('Vec<') && !['String', 'i32', 'i64', 'f32', 'f64', 'bool'].includes(requestType)) {
+				if (category === 'file') {
+					fileServiceTypes.add(requestType);
+				} else {
+					folderServiceTypes.add(requestType);
+				}
 			}
 		}
 		

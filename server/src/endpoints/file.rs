@@ -1,7 +1,8 @@
 use crate::models::{
     DeleteFileRequest, DownloadFileRequest, FileSystemItem, GetListFileAndFolderRequest,
+    RestoreFileRequest, TrashItem,
 };
-use crate::utils::validate_and_resolve_path;
+use crate::utils::{get_trash_directory, validate_and_resolve_path};
 use axum::{
     extract::Multipart,
     http::{header, StatusCode},
@@ -66,6 +67,11 @@ pub async fn get_list_file_and_folder(
     {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip .trash directory
+        if name == ".trash" {
+            continue;
+        }
 
         let metadata = tokio::fs::metadata(&path)
             .await
@@ -208,7 +214,7 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
     path = "/api/delete",
     request_body = DeleteFileRequest,
     responses(
-        (status = 200, description = "File deleted successfully", body = String),
+        (status = 200, description = "File moved to trash successfully", body = String),
         (status = 403, description = "Forbidden - path outside allowed directory"),
         (status = 404, description = "File not found"),
         (status = 500, description = "Internal server error")
@@ -217,13 +223,193 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
 pub async fn delete_file(Json(req): Json<DeleteFileRequest>) -> Result<Json<String>, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.file_path)?;
 
-    tokio::fs::remove_file(&safe_path).await.map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    })?;
+    // Check if file exists
+    if !safe_path.exists() {
+        return Err(StatusCode::NOT_FOUND);
+    }
 
-    Ok(Json("File deleted successfully".to_string()))
+    // Get file metadata for trash info
+    let metadata = tokio::fs::metadata(&safe_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create trash item ID (timestamp + filename)
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let filename = safe_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
+
+    let trash_item_id = format!("{}_{}", timestamp, filename);
+
+    // Create trash directory structure
+    let trash_dir = get_trash_directory();
+    let trash_files_dir = trash_dir.join("files");
+    let trash_metadata_dir = trash_dir.join("metadata");
+
+    tokio::fs::create_dir_all(&trash_files_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tokio::fs::create_dir_all(&trash_metadata_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Move file to trash
+    let trash_file_path = trash_files_dir.join(&trash_item_id);
+    tokio::fs::rename(&safe_path, &trash_file_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Save metadata
+    let trash_metadata = serde_json::json!({
+        "id": trash_item_id,
+        "original_path": req.file_path,
+        "deleted_at": chrono::Utc::now().to_rfc3339(),
+        "size": metadata.len(),
+    });
+
+    let metadata_path = trash_metadata_dir.join(format!("{}.json", trash_item_id));
+    tokio::fs::write(&metadata_path, trash_metadata.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json("File moved to trash successfully".to_string()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/trash",
+    responses(
+        (status = 200, description = "List of trash items", body = Vec<TrashItem>),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn list_trash() -> Result<Json<Vec<TrashItem>>, StatusCode> {
+    let trash_metadata_dir = get_trash_directory().join("metadata");
+
+    if !trash_metadata_dir.exists() {
+        return Ok(Json(vec![]));
+    }
+
+    let mut entries = tokio::fs::read_dir(&trash_metadata_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut trash_items = Vec::new();
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let content = tokio::fs::read_to_string(&path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            if let Ok(metadata) = serde_json::from_str::<serde_json::Value>(&content) {
+                let size = metadata["size"].as_u64().unwrap_or(0);
+                trash_items.push(TrashItem {
+                    id: metadata["id"].as_str().unwrap_or("").to_string(),
+                    original_path: metadata["original_path"].as_str().unwrap_or("").to_string(),
+                    name: metadata["original_path"]
+                        .as_str()
+                        .and_then(|p| std::path::Path::new(p).file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    deleted_at: metadata["deleted_at"].as_str().unwrap_or("").to_string(),
+                    size: format_file_size(size),
+                });
+            }
+        }
+    }
+
+    Ok(Json(trash_items))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/trash/restore",
+    request_body = RestoreFileRequest,
+    responses(
+        (status = 200, description = "File restored successfully", body = String),
+        (status = 404, description = "Trash item not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn restore_file(Json(req): Json<RestoreFileRequest>) -> Result<Json<String>, StatusCode> {
+    let trash_dir = get_trash_directory();
+    let trash_files_dir = trash_dir.join("files");
+    let trash_metadata_dir = trash_dir.join("metadata");
+
+    // Read metadata
+    let metadata_path = trash_metadata_dir.join(format!("{}.json", req.trash_item_id));
+    if !metadata_path.exists() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let content = tokio::fs::read_to_string(&metadata_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let metadata: serde_json::Value =
+        serde_json::from_str(&content).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let original_path = metadata["original_path"]
+        .as_str()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Validate and resolve the original path
+    let restore_path = validate_and_resolve_path(original_path)?;
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = restore_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // Move file back from trash
+    let trash_file_path = trash_files_dir.join(&req.trash_item_id);
+    tokio::fs::rename(&trash_file_path, &restore_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Remove metadata
+    tokio::fs::remove_file(&metadata_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json("File restored successfully".to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/trash/empty",
+    responses(
+        (status = 200, description = "Trash emptied successfully", body = String),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn empty_trash() -> Result<Json<String>, StatusCode> {
+    let trash_dir = get_trash_directory();
+
+    if trash_dir.exists() {
+        tokio::fs::remove_dir_all(&trash_dir)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Recreate empty trash directory
+        tokio::fs::create_dir_all(&trash_dir)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json("Trash emptied successfully".to_string()))
 }

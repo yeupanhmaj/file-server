@@ -3,19 +3,25 @@ mod endpoints;
 mod models;
 mod utils;
 
-use axum::{routing::post, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use tower_http::cors::{Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
 use endpoints::{
-    create_folder, delete_file, download_file, get_list_file_and_folder, rename_folder,
-    search_files, sorted_list_file_and_folder, upload_file,
+    create_folder, delete_file, download_file, empty_trash, get_list_file_and_folder, list_trash,
+    rename_folder, restore_file, search_files, sorted_list_file_and_folder, upload_file,
 };
 
 #[tokio::main]
 async fn main() {
+    // Initialize trash directory
+    utils::init_trash_directory().expect("Failed to initialize trash directory");
+
     // Define your CORS policy
     let cors = CorsLayer::new()
         .allow_origin(Any) // For debugging. In production, use "http://example.com".parse().unwrap()
@@ -49,5 +55,8 @@ fn route_builder() -> Router {
         .route("/api/download", post(download_file))
         .route("/api/delete", post(delete_file))
         .route("/api/rename-folder", post(rename_folder))
+        .route("/api/trash", get(list_trash))
+        .route("/api/trash/restore", post(restore_file))
+        .route("/api/trash/empty", post(empty_trash))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
 }

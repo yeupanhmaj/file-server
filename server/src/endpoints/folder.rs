@@ -17,7 +17,7 @@ pub async fn create_folder(
 ) -> Result<Json<String>, StatusCode> {
     let folder_path = format!("{}/{}", req.path, req.folder_name);
     let safe_path = validate_and_resolve_path(&folder_path)?;
-    
+
     tokio::fs::create_dir(&safe_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -60,7 +60,7 @@ pub async fn rename_folder(
 )]
 pub async fn search_files(Json(req): Json<SearchRequest>) -> Result<Json<Vec<String>>, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.path)?;
-    
+
     let mut entries = tokio::fs::read_dir(&safe_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -73,6 +73,16 @@ pub async fn search_files(Json(req): Json<SearchRequest>) -> Result<Json<Vec<Str
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {
         let entry_path = entry.path();
+        let name = entry_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // Skip .trash directory
+        if name == ".trash" {
+            continue;
+        }
+
         if entry_path.to_str() == Some(&req.search_string) {
             let display_path = entry_path.display().to_string();
 
@@ -102,7 +112,7 @@ pub async fn sorted_list_file_and_folder(
 ) -> Result<Json<Vec<String>>, StatusCode> {
     let requested_path = req.option.as_deref().unwrap_or(".");
     let safe_path = validate_and_resolve_path(requested_path)?;
-    
+
     let mut entries = tokio::fs::read_dir(&safe_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -115,6 +125,11 @@ pub async fn sorted_list_file_and_folder(
     {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip .trash directory
+        if name == ".trash" {
+            continue;
+        }
 
         if path.is_dir() {
             items.push(format!("[DIR] {}", name));

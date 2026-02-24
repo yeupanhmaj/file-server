@@ -43,3 +43,15 @@ export interface SortOptionRequest {
 	option?: string;
 }
 
+export interface RestoreFileRequest {
+	trash_item_id: string;
+}
+
+export interface TrashItem {
+	id: string;
+	original_path: string;
+	name: string;
+	deleted_at: string;
+	size: string;
+}
+

@@ -2,6 +2,10 @@
 	import { Folder, Document, OverflowMenuVertical } from 'carbon-icons-svelte';
 
 	let { files = [] } = $props();
+
+	const onFileClick = (file: any) => {
+		console.log('Clicked file:', file);
+	};
 </script>
 
 <div class="file-list">
@@ -13,7 +17,18 @@
 	</div>
 
 	{#each files as file}
-		<div class="file-row">
+		<div
+			role="button"
+			tabindex="0"
+			class="file-row"
+			onclick={() => onFileClick(file)}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					onFileClick(file);
+				}
+			}}
+		>
 			<div class="file-name">
 				{#if file.type === 'folder'}
 					<Folder size={20} />
