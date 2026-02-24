@@ -3,6 +3,7 @@
 	import FolderViewContainer from '$lib/components/folder-view-container/FolderViewContainer.svelte';
 
 	let viewMode = $state<'grid' | 'list'>('list');
+	let currentPath = '.';
 
 	const toggleView = () => {
 		if (viewMode === 'list') {
@@ -12,7 +13,13 @@
 		}
 	};
 
-	let filesPromise = $state(fileService.getListFileAndFolder({ path: '.' }));
+	const loadFiles = () => fileService.getListFileAndFolder({ path: currentPath });
+	
+	let filesPromise = $state(loadFiles());
+
+	const refreshFiles = () => {
+		filesPromise = loadFiles();
+	};
 </script>
 
 <FolderViewContainer viewName="My Drive" {toggleView} {viewMode}>
@@ -20,9 +27,9 @@
 		<p>Loading files...</p>
 	{:then files}
 		{#if viewMode === 'list'}
-			<ListView {files} />
+			<ListView {files} {currentPath} onRefresh={refreshFiles} />
 		{:else}
-			<GridView {files} />
+			<GridView {files} {currentPath} onRefresh={refreshFiles} />
 		{/if}
 	{:catch error}
 		<p>Error loading files: {error.message}</p>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Folder, Document, OverflowMenuVertical } from 'carbon-icons-svelte';
 
-	let { files = [] } = $props();
+	let { files = [], currentPath = '.', onRefresh = () => {} } = $props();
 </script>
 
 <div class="file-grid">
