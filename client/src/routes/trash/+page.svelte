@@ -79,9 +79,9 @@
 			</div>
 			{@const files = mapTrashToFiles(trashItems)}
 			{#if viewMode === 'list'}
-				<ListView {files} />
+				<ListView {files} isTrashMode={true} onRestore={handleRestore} />
 			{:else}
-				<GridView {files} />
+				<GridView {files} isTrashMode={true} onRestore={handleRestore} />
 			{/if}
 		{/if}
 	{:catch error}

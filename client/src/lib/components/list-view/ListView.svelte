@@ -1,8 +1,14 @@
 <script lang="ts">
-	import { Folder, Document, OverflowMenuVertical, TrashCan } from 'carbon-icons-svelte';
+	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo } from 'carbon-icons-svelte';
 	import { fileService } from '$lib';
 
-	let { files = [], currentPath = '.', onRefresh = () => {} } = $props();
+	let {
+		files = [],
+		currentPath = '.',
+		onRefresh = () => {},
+		isTrashMode = false,
+		onRestore = undefined
+	} = $props();
 
 	let openMenuId = $state<string | null>(null);
 
@@ -24,10 +30,10 @@
 
 	const handleDelete = async (file: any, event: MouseEvent) => {
 		event.stopPropagation();
-		
+
 		const filePath = constructFilePath(file.name);
 		const confirmMsg = `Are you sure you want to move "${file.name}" to trash?`;
-		
+
 		if (!confirm(confirmMsg)) {
 			return;
 		}
@@ -39,6 +45,20 @@
 		} catch (error) {
 			console.error('Failed to delete file:', error);
 			alert('Failed to move file to trash');
+		}
+	};
+
+	const handleRestore = async (file: any, event: MouseEvent) => {
+		event.stopPropagation();
+
+		if (onRestore) {
+			try {
+				await onRestore(file.id);
+				openMenuId = null;
+			} catch (error) {
+				console.error('Failed to restore file:', error);
+				alert('Failed to restore file');
+			}
 		}
 	};
 
@@ -89,16 +109,20 @@
 				>
 					<OverflowMenuVertical size={20} />
 				</button>
-				
+
 				{#if openMenuId === file.name}
 					<div class="action-menu">
-						<button
-							class="menu-item delete-item"
-							onclick={(e) => handleDelete(file, e)}
-						>
-							<TrashCan size={16} />
-							<span>Move to trash</span>
-						</button>
+						{#if isTrashMode}
+							<button class="menu-item restore-item" onclick={(e) => handleRestore(file, e)}>
+								<Undo size={16} />
+								<span>Restore</span>
+							</button>
+						{:else}
+							<button class="menu-item delete-item" onclick={(e) => handleDelete(file, e)}>
+								<TrashCan size={16} />
+								<span>Move to trash</span>
+							</button>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -229,6 +253,14 @@
 
 	.delete-item:hover {
 		background-color: #fce8e6;
+	}
+
+	.restore-item {
+		color: #1a73e8;
+	}
+
+	.restore-item:hover {
+		background-color: #e8f0fe;
 	}
 
 	@media (max-width: 768px) {

@@ -6,4 +6,4 @@
 </script>
 
 <h1>{post}</h1>
-<div>{@html post}</div>
+<div>{post}</div>

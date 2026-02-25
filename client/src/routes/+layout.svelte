@@ -1,28 +1,27 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import {
-		Search,
-		Menu,
-		Settings,
-		Help,
 		Apps,
-		UserAvatar,
-		Folder,
 		CloudUpload,
-		Time,
+		Folder,
+		Help,
+		Search,
+		Settings,
+		SettingsAdjust,
 		TrashCan,
-		Star,
-		SettingsAdjust
+		UserAvatar
 	} from 'carbon-icons-svelte';
-	import { page } from '$app/stores';
+	import { resolve } from '$app/paths';
 
-	import favicon from '$lib/assets/favicon.svg';
 	import { Divider } from '$lib';
+	import favicon from '$lib/assets/favicon.svg';
+	import { goto } from '$app/navigation';
 
 	let { children } = $props();
 	let searchQuery = $state('');
 
 	const isActive = (path: string) => {
-		return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
+		return page.url.pathname === path || page.url.pathname.startsWith(path + '/');
 	};
 </script>
 
@@ -72,14 +71,22 @@
 			</button>
 
 			<nav class="nav-menu">
-				<a href="/home" class="nav-item" class:active={isActive('/home')}>
+				<button
+					onclick={() => goto(resolve('/home'))}
+					class="nav-item"
+					class:active={isActive('/home')}
+				>
 					<Folder size={20} />
 					<span>My Drive</span>
-				</a>
-				<a href="/trash" class="nav-item" class:active={isActive('/trash')}>
+				</button>
+				<button
+					onclick={() => goto(resolve('/trash'))}
+					class="nav-item"
+					class:active={isActive('/trash')}
+				>
 					<TrashCan size={20} />
 					<span>Trash</span>
-				</a>
+				</button>
 			</nav>
 
 			<Divider />
@@ -255,11 +262,13 @@
 		gap: 12px;
 		padding: 10px 12px;
 		border-radius: 24px;
+		border: transparent;
 		color: #202124;
 		text-decoration: none;
 		font-size: 14px;
 		transition: background-color 0.2s;
 		cursor: pointer;
+		background-color: transparent;
 	}
 
 	.nav-item:hover {
