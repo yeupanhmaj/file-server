@@ -12,7 +12,7 @@ pub struct GetFolderByIdRequest {
     pub folder_id: String,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, Clone)]
 pub struct FileSystemItem {
     pub id: String,
     pub name: String,
@@ -61,6 +61,27 @@ pub struct RenameFolderRequest {
 pub struct SearchRequest {
     pub search_string: String,
     pub path: String,
+    #[serde(default = "default_page")]
+    pub page: usize,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+fn default_page() -> usize {
+    1
+}
+
+fn default_limit() -> usize {
+    5
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct SearchResponse {
+    pub results: Vec<FileSystemItem>,
+    pub total: usize,
+    pub page: usize,
+    pub limit: usize,
+    pub has_more: bool,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]

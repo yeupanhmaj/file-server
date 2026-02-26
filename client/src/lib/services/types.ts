@@ -44,6 +44,16 @@ export interface RenameFolderRequest {
 export interface SearchRequest {
 	search_string: string;
 	path: string;
+	page?: number;
+	limit?: number;
+}
+
+export interface SearchResponse {
+	results: FileSystemItem[];
+	total: number;
+	page: number;
+	limit: number;
+	has_more: boolean;
 }
 
 export interface SortOptionRequest {

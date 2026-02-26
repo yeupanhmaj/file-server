@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+
 	import { fileService, FolderViewContainer, ListView, GridView } from '$lib';
 
 	let viewMode = $state<'grid' | 'list'>('list');

@@ -23,6 +23,13 @@
 	const isActive = (path: string) => {
 		return page.url.pathname === path || page.url.pathname.startsWith(path + '/');
 	};
+
+	const handleSearch = (e: KeyboardEvent) => {
+		if (e.key === 'Enter' && searchQuery.trim() !== '') {
+			// @ts-expect-error: Query parameters are not in the type system but work at runtime
+			goto(resolve(`/search?q=${encodeURIComponent(searchQuery.trim())}`));
+		}
+	};
 </script>
 
 <svelte:head>
@@ -41,7 +48,12 @@
 
 		<div class="search-bar">
 			<Search size={20} class="search-icon" />
-			<input type="text" placeholder="Search in files" bind:value={searchQuery} />
+			<input
+				type="text"
+				placeholder="Search in files"
+				bind:value={searchQuery}
+				onkeydown={handleSearch}
+			/>
 		</div>
 
 		<div class="header-right">

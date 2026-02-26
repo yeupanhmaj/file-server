@@ -1,5 +1,7 @@
-use crate::models::{CreateFolderRequest, RenameFolderRequest, SearchRequest};
-use crate::utils::validate_and_resolve_path;
+use crate::models::{
+    CreateFolderRequest, FileSystemItem, RenameFolderRequest, SearchRequest, SearchResponse,
+};
+use crate::utils::{get_base_directory_canonical, validate_and_resolve_path};
 use axum::{http::StatusCode, Json};
 
 #[utoipa::path(
@@ -53,48 +55,160 @@ pub async fn rename_folder(
     path = "/api/search",
     request_body = SearchRequest,
     responses(
-        (status = 200, description = "File search results", body = Vec<String>),
+        (status = 200, description = "File search results", body = SearchResponse),
         (status = 403, description = "Forbidden - path outside allowed directory"),
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn search_files(Json(req): Json<SearchRequest>) -> Result<Json<Vec<String>>, StatusCode> {
+pub async fn search_files(
+    Json(req): Json<SearchRequest>,
+) -> Result<Json<SearchResponse>, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.path)?;
+    let base_dir = get_base_directory_canonical()?;
+    let search_term = req.search_string.to_lowercase();
 
-    let mut entries = tokio::fs::read_dir(&safe_path)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let page = req.page.max(1); // Ensure page is at least 1
+    let limit = req.limit.max(1); // Ensure limit is at least 1
+    let skip = (page - 1) * limit;
+    let max_items = skip + limit + 1; // Collect one extra to check if there are more
 
-    let mut results = Vec::new();
+    let mut all_results = Vec::new();
 
-    while let Some(entry) = entries
-        .next_entry()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        let entry_path = entry.path();
-        let name = entry_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-
-        // Skip .trash directory
-        if name == ".trash" {
-            continue;
+    // Recursive search function with early termination
+    fn search_recursive(
+        path: std::path::PathBuf,
+        base_dir: &std::path::Path,
+        search_term: &str,
+        results: &mut Vec<FileSystemItem>,
+        max_items: usize,
+    ) -> std::io::Result<bool> {
+        // Return true if we should stop searching
+        if results.len() >= max_items {
+            return Ok(true); // Stop recursion
         }
 
-        if entry_path.to_str() == Some(&req.search_string) {
-            let display_path = entry_path.display().to_string();
+        if !path.is_dir() {
+            return Ok(false);
+        }
 
+        let entries = std::fs::read_dir(&path)?;
+
+        for entry in entries.flatten() {
+            if results.len() >= max_items {
+                return Ok(true); // Stop recursion
+            }
+
+            let entry_path = entry.path();
+            let name = entry_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+
+            // Skip .trash directory
+            if name == ".trash" {
+                continue;
+            }
+
+            // Case-insensitive substring match
+            if name.to_lowercase().contains(search_term) {
+                // Get metadata
+                if let Ok(metadata) = entry_path.metadata() {
+                    let item_type = if entry_path.is_dir() {
+                        "folder"
+                    } else {
+                        "file"
+                    };
+
+                    let size = if entry_path.is_dir() {
+                        "-".to_string()
+                    } else {
+                        crate::endpoints::file::format_file_size(metadata.len())
+                    };
+
+                    let modified = metadata
+                        .modified()
+                        .ok()
+                        .map(crate::endpoints::file::format_system_time)
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    // Generate relative path from base directory
+                    let item_path_relative = entry_path
+                        .strip_prefix(base_dir)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| entry_path.to_string_lossy().to_string());
+
+                    let id = crate::utils::generate_id_from_path(&item_path_relative);
+
+                    // Get parent path for parent_id
+                    let parent_path = entry_path
+                        .parent()
+                        .and_then(|p| p.strip_prefix(base_dir).ok())
+                        .map(|p| p.to_string_lossy().to_string());
+
+                    let parent_id = parent_path
+                        .filter(|p| !p.is_empty() && p != ".")
+                        .map(|p| crate::utils::generate_id_from_path(&p));
+
+                    results.push(FileSystemItem {
+                        id,
+                        name: name.to_string(),
+                        item_type: item_type.to_string(),
+                        modified,
+                        size,
+                        parent_id,
+                        path: item_path_relative,
+                    });
+
+                    if results.len() >= max_items {
+                        return Ok(true); // Stop recursion
+                    }
+                }
+            }
+
+            // Recurse into subdirectories
             if entry_path.is_dir() {
-                results.push(format!("[DIR] {}", display_path));
-            } else {
-                results.push(format!("[FILE] {}", display_path));
+                let should_stop =
+                    search_recursive(entry_path, base_dir, search_term, results, max_items)?;
+                if should_stop {
+                    return Ok(true); // Propagate stop signal
+                }
             }
         }
+
+        Ok(false)
     }
 
-    Ok(Json(results))
+    // Start recursive search
+    search_recursive(
+        safe_path,
+        &base_dir,
+        &search_term,
+        &mut all_results,
+        max_items,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Calculate pagination metadata
+    let total_found = all_results.len();
+    let has_more = total_found > skip + limit;
+
+    // Slice results for the requested page
+    let end_idx = (skip + limit).min(total_found);
+    let page_results: Vec<FileSystemItem> = if skip < total_found {
+        all_results[skip..end_idx].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    let response = SearchResponse {
+        results: page_results,
+        total: total_found.min(skip + limit), // Don't report more than we've searched
+        page,
+        limit,
+        has_more,
+    };
+
+    Ok(Json(response))
 }
 
 #[utoipa::path(

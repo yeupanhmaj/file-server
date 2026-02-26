@@ -14,7 +14,7 @@ use axum::{
 };
 use std::time::SystemTime;
 
-fn format_file_size(size: u64) -> String {
+pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
     const GB: u64 = MB * 1024;
@@ -30,7 +30,7 @@ fn format_file_size(size: u64) -> String {
     }
 }
 
-fn format_system_time(time: SystemTime) -> String {
+pub fn format_system_time(time: SystemTime) -> String {
     match time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => {
             let secs = duration.as_secs();
