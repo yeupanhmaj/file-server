@@ -44,15 +44,15 @@ export interface RenameFolderRequest {
 export interface SearchRequest {
 	search_string: string;
 	path: string;
-	page: any;
-	limit: any;
+	page: number;
+	limit: number;
 }
 
 export interface SearchResponse {
-	results: Array;
-	total: any;
-	page: any;
-	limit: any;
+	results: FileSystemItem[];
+	total: number;
+	page: number;
+	limit: number;
 	has_more: boolean;
 }
 

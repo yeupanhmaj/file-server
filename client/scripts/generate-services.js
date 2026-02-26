@@ -1,19 +1,19 @@
 /**
  * Automatic Service Generator
- * 
+ *
  * Scans Rust backend endpoints and generates TypeScript service classes.
- * 
+ *
  * Supported HTTP Methods:
  * - GET: Generates methods with query params
  * - POST: Generates methods with request body
  * - DELETE: Generates methods with optional request body
  * - PUT: Generates methods with request body
  * - PATCH: Generates methods with request body
- * 
+ *
  * Special Cases:
  * - Multipart handlers → FormData parameter
  * - download_file handler → Blob response type
- * 
+ *
  * Usage:
  * - npm run dev (automatic)
  * - npm run generate:services (manual)
@@ -58,7 +58,8 @@ function extractRequestTypes() {
 		const fieldsText = match[2];
 		const fields = [];
 
-		const fieldRegex = /pub (\w+):\s*(Option<)?(\w+)>?,?/g;
+		// Updated regex to capture generic types like Vec<Type> or Option<Vec<Type>>
+		const fieldRegex = /pub (\w+):\s*(Option<)?(Vec<\w+>|\w+)>?,?/g;
 		let fieldMatch;
 
 		while ((fieldMatch = fieldRegex.exec(fieldsText)) !== null) {
@@ -77,6 +78,13 @@ function extractRequestTypes() {
 
 // Map Rust types to TypeScript types
 function rustToTsType(rustType) {
+	// Handle Vec<Type> -> Type[]
+	if (rustType.startsWith('Vec<') && rustType.endsWith('>')) {
+		const innerType = rustType.slice(4, -1);
+		const convertedInner = rustToTsType(innerType);
+		return `${convertedInner}[]`;
+	}
+
 	const typeMap = {
 		String: 'string',
 		i32: 'number',
@@ -84,15 +92,15 @@ function rustToTsType(rustType) {
 		f32: 'number',
 		f64: 'number',
 		bool: 'boolean',
-		Vec: 'Array'
+		usize: 'number'
 	};
-	return typeMap[rustType] || 'any';
+	return typeMap[rustType] || rustType;
 }
 
 // Convert Rust return type to TypeScript type
 function rustReturnTypeToTs(rustType) {
 	if (!rustType) return 'unknown';
-	
+
 	// Handle Vec<Type> -> Type[]
 	if (rustType.startsWith('Vec<') && rustType.endsWith('>')) {
 		const innerType = rustType.slice(4, -1);
@@ -100,10 +108,10 @@ function rustReturnTypeToTs(rustType) {
 		const convertedInner = rustReturnTypeToTs(innerType);
 		return `${convertedInner}[]`;
 	}
-	
+
 	// Handle String -> string
 	if (rustType === 'String') return 'string';
-	
+
 	// Handle other primitives
 	const typeMap = {
 		i32: 'number',
@@ -111,8 +119,9 @@ function rustReturnTypeToTs(rustType) {
 		f32: 'number',
 		f64: 'number',
 		bool: 'boolean',
+		usize: 'number'
 	};
-	
+
 	return typeMap[rustType] || rustType;
 }
 
@@ -127,21 +136,21 @@ function mapHandlersToTypes() {
 	const processFile = (content) => {
 		// Match pub async fn function_name
 		const functionMatches = content.matchAll(/pub async fn (\w+)/g);
-		
+
 		for (const funcMatch of functionMatches) {
 			const funcName = funcMatch[1];
 			const funcStart = funcMatch.index;
-			
+
 			// Look ahead from function start to find Json<Type> or Multipart
 			const lookAhead = content.substring(funcStart, funcStart + 500);
-			
+
 			// Try to find Multipart first (takes precedence)
 			const multipartMatch = lookAhead.match(/mut multipart:\s*Multipart/i);
 			if (multipartMatch) {
 				mapping[funcName] = 'FormData';
 				continue;
 			}
-			
+
 			// Try to find Json<Type> in function parameters (before -> return)
 			// Match only parameters, not return types
 			const paramsSection = lookAhead.split('->')[0]; // Get everything before return type
@@ -153,7 +162,7 @@ function mapHandlersToTypes() {
 				const cleanType = typeName.includes('::') ? typeName.split('::').pop() : typeName;
 				mapping[funcName] = cleanType;
 			}
-			
+
 			// Extract return type from Result<Json<T>, StatusCode>
 			// Need to handle nested angle brackets like Vec<Type>
 			const returnMatch = lookAhead.match(/->\s*Result<Json<(.+?)>,\s*StatusCode>/);
@@ -178,14 +187,19 @@ function mapHandlersToTypes() {
 function classifyEndpoint(handlerName) {
 	const fileHandlers = [
 		'upload_file',
-		'download_file', 
+		'download_file',
 		'delete_file',
 		'get_list_file_and_folder',
 		'list_trash',
 		'restore_file',
 		'empty_trash'
 	];
-	const folderHandlers = ['create_folder', 'rename_folder', 'search_files', 'sorted_list_file_and_folder'];
+	const folderHandlers = [
+		'create_folder',
+		'rename_folder',
+		'search_files',
+		'sorted_list_file_and_folder'
+	];
 
 	if (fileHandlers.includes(handlerName)) return 'file';
 	if (folderHandlers.includes(handlerName)) return 'folder';
@@ -229,7 +243,7 @@ function generateServiceMethods(routes, handlerTypes, returnTypes) {
 		const httpMethod = method.toLowerCase(); // 'get', 'post', 'delete', etc.
 
 		let methodCode;
-		
+
 		// Handle FormData uploads
 		if (requestType === 'FormData') {
 			methodCode = `	async ${methodName}(formData: FormData) {
@@ -302,7 +316,10 @@ function main() {
 
 	console.log(`✅ Found ${routes.length} endpoints`);
 	console.log(`✅ Found ${Object.keys(types).length} request types`);
-	console.log('📋 Routes:', routes.map(r => `${r.method} ${r.path} -> ${r.handlerName}`).join('\n       '));
+	console.log(
+		'📋 Routes:',
+		routes.map((r) => `${r.method} ${r.path} -> ${r.handlerName}`).join('\n       ')
+	);
 	console.log('📋 Handler to Type mapping:', handlerTypes);
 	console.log('📋 Return Types:', returnTypes);
 
@@ -312,7 +329,11 @@ function main() {
 	console.log('✅ Generated types.ts');
 
 	// Generate service methods
-	const { fileServiceMethods, folderServiceMethods } = generateServiceMethods(routes, handlerTypes, returnTypes);
+	const { fileServiceMethods, folderServiceMethods } = generateServiceMethods(
+		routes,
+		handlerTypes,
+		returnTypes
+	);
 
 	// Collect used types for each service
 	const fileServiceTypes = new Set();
@@ -327,7 +348,10 @@ function main() {
 		// Add request types
 		if (requestType && requestType !== 'FormData' && requestType !== 'unknown') {
 			// Filter out invalid types (Vec<...>, primitives)
-			if (!requestType.startsWith('Vec<') && !['String', 'i32', 'i64', 'f32', 'f64', 'bool'].includes(requestType)) {
+			if (
+				!requestType.startsWith('Vec<') &&
+				!['String', 'i32', 'i64', 'f32', 'f64', 'bool'].includes(requestType)
+			) {
 				if (category === 'file') {
 					fileServiceTypes.add(requestType);
 				} else {
@@ -335,7 +359,7 @@ function main() {
 				}
 			}
 		}
-		
+
 		// Add return types (extract from Vec<Type> or Type)
 		if (rawReturnType) {
 			let typeToImport = rawReturnType;
@@ -344,7 +368,10 @@ function main() {
 				typeToImport = typeToImport.slice(4, -1);
 			}
 			// Only import custom types, not primitives
-			if (typeToImport && !['String', 'i32', 'i64', 'f32', 'f64', 'bool', 'Blob', 'unknown'].includes(typeToImport)) {
+			if (
+				typeToImport &&
+				!['String', 'i32', 'i64', 'f32', 'f64', 'bool', 'Blob', 'unknown'].includes(typeToImport)
+			) {
 				if (category === 'file') {
 					fileServiceTypes.add(typeToImport);
 				} else {
