@@ -11,7 +11,7 @@ export interface GetFolderByIdRequest {
 export interface FileSystemItem {
 	id: string;
 	name: string;
-	type: string;
+	item_type: string;
 	modified: string;
 	size: string;
 	parent_id?: string;
@@ -44,15 +44,15 @@ export interface RenameFolderRequest {
 export interface SearchRequest {
 	search_string: string;
 	path: string;
-	page?: number;
-	limit?: number;
+	page: any;
+	limit: any;
 }
 
 export interface SearchResponse {
-	results: FileSystemItem[];
-	total: number;
-	page: number;
-	limit: number;
+	results: Array;
+	total: any;
+	page: any;
+	limit: any;
 	has_more: boolean;
 }
 
@@ -71,3 +71,4 @@ export interface TrashItem {
 	deleted_at: string;
 	size: string;
 }
+

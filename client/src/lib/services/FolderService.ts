@@ -2,6 +2,7 @@ import { ServiceBase } from './ServiceBase';
 import type {
 	CreateFolderRequest,
 	SearchRequest,
+	SearchResponse,
 	SortOptionRequest,
 	RenameFolderRequest
 } from './types';
@@ -16,7 +17,7 @@ export class FolderService extends ServiceBase {
 	}
 
 	async searchFiles(request: SearchRequest) {
-		return this.post<string[]>('/api/search', request);
+		return this.post<SearchResponse>('/api/search', request);
 	}
 
 	async sortedListFileAndFolder(request: SortOptionRequest) {

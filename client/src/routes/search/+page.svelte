@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { fileService } from '$lib';
+	import { folderService } from '$lib';
 	import { Document, Folder } from 'carbon-icons-svelte';
 	import type { FileSystemItem } from '$lib/services/types';
 
@@ -31,7 +31,7 @@
 		}
 
 		try {
-			const response = await fileService.searchFiles({
+			const response = await folderService.searchFiles({
 				search_string: searchQuery,
 				path: '.',
 				page: pageNum,
@@ -77,7 +77,7 @@
 	};
 
 	const handleItemClick = async (file: FileSystemItem) => {
-		if (file.type === 'folder') {
+		if (file.item_type === 'folder') {
 			await goto(resolve(`/folder/${file.id}`));
 		}
 		// For files, we could implement a preview or download action
@@ -112,7 +112,7 @@
 				{#each allResults as file (file.id)}
 					<button class="result-item" onclick={() => handleItemClick(file)} type="button">
 						<div class="result-icon">
-							{#if file.type === 'folder'}
+							{#if file.item_type === 'folder'}
 								<Folder size={24} />
 							{:else}
 								<Document size={24} />

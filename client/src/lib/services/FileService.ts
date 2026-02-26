@@ -1,14 +1,12 @@
 import { ServiceBase } from './ServiceBase';
 import type {
 	GetListFileAndFolderRequest,
-	GetFolderByIdRequest,
 	FileSystemItem,
+	GetFolderByIdRequest,
 	DownloadFileRequest,
 	DeleteFileRequest,
 	TrashItem,
-	RestoreFileRequest,
-	SearchRequest,
-	SearchResponse
+	RestoreFileRequest
 } from './types';
 
 export class FileService extends ServiceBase {
@@ -36,10 +34,6 @@ export class FileService extends ServiceBase {
 
 	async deleteFile(request: DeleteFileRequest) {
 		return this.post<string>('/api/delete', request);
-	}
-
-	async searchFiles(request: SearchRequest) {
-		return this.post<SearchResponse>('/api/search', request);
 	}
 
 	async listTrash() {
