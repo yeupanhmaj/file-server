@@ -13,8 +13,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
 use endpoints::{
-    create_folder, delete_file, download_file, empty_trash, get_list_file_and_folder, list_trash,
-    rename_folder, restore_file, search_files, sorted_list_file_and_folder, upload_file,
+    create_folder, delete_file, download_file, empty_trash, get_folder_by_id,
+    get_list_file_and_folder, list_trash, rename_folder, restore_file, search_files,
+    sorted_list_file_and_folder, upload_file,
 };
 
 #[tokio::main]
@@ -48,6 +49,7 @@ async fn shutdown_signal() {
 fn route_builder() -> Router {
     Router::new()
         .route("/api/ls", post(get_list_file_and_folder))
+        .route("/api/folder", post(get_folder_by_id))
         .route("/api/mkdir", post(create_folder))
         .route("/api/search", post(search_files))
         .route("/api/sort", post(sorted_list_file_and_folder))

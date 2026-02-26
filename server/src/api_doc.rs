@@ -7,6 +7,7 @@ use utoipa::OpenApi;
         crate::endpoints::folder::rename_folder,
         crate::endpoints::folder::search_files,
         crate::endpoints::file::get_list_file_and_folder,
+        crate::endpoints::file::get_folder_by_id,
         crate::endpoints::file::upload_file,
         crate::endpoints::file::download_file,
         crate::endpoints::file::delete_file,
@@ -20,7 +21,9 @@ use utoipa::OpenApi;
             crate::models::UploadFileRequest,
             crate::models::DownloadFileRequest,
             crate::models::DeleteFileRequest,
-            crate::models::SortOptionRequest
+            crate::models::SortOptionRequest,
+            crate::models::GetFolderByIdRequest,
+            crate::models::FileSystemItem
         )
     ),
     tags(

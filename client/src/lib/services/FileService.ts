@@ -1,6 +1,7 @@
 import { ServiceBase } from './ServiceBase';
 import type {
 	GetListFileAndFolderRequest,
+	GetFolderByIdRequest,
 	FileSystemItem,
 	DownloadFileRequest,
 	DeleteFileRequest,
@@ -15,6 +16,10 @@ export class FileService extends ServiceBase {
 
 	async getListFileAndFolder(request: GetListFileAndFolderRequest) {
 		return this.post<FileSystemItem[]>('/api/ls', request);
+	}
+
+	async getFolderById(request: GetFolderByIdRequest) {
+		return this.post<FileSystemItem[]>('/api/folder', request);
 	}
 
 	async uploadFile(formData: FormData) {

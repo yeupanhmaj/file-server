@@ -278,9 +278,11 @@ name = "file-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "chrono",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tower-http",
  "utoipa",

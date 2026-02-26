@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo } from 'carbon-icons-svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+
 	import { fileService } from '$lib';
 
 	let {
@@ -12,8 +15,14 @@
 
 	let openMenuId = $state<string | null>(null);
 
-	const onFileClick = (file: any) => {
-		console.log('Clicked file:', file);
+	const onFileClick = async (file: any) => {
+		if (file.type === 'folder') {
+			// Navigate using the folder's ID
+			await goto(resolve(`/folder/${file.id}`));
+		} else {
+			// TODO: Implement file preview/download
+			console.log('Clicked file:', file);
+		}
 	};
 
 	const toggleMenu = (fileName: string, event: MouseEvent) => {
@@ -31,7 +40,8 @@
 	const handleDelete = async (file: any, event: MouseEvent) => {
 		event.stopPropagation();
 
-		const filePath = constructFilePath(file.name);
+		// Use the path from the file object if available, otherwise construct it
+		const filePath = file.path || constructFilePath(file.name);
 		const confirmMsg = `Are you sure you want to move "${file.name}" to trash?`;
 
 		if (!confirm(confirmMsg)) {
@@ -68,6 +78,57 @@
 	};
 </script>
 
+{#snippet file_render(file: any)}
+	<div
+		role="button"
+		tabindex="0"
+		class="file-row"
+		onclick={() => onFileClick(file)}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				onFileClick(file);
+			}
+		}}
+	>
+		<div class="file-name">
+			{#if file.type === 'folder'}
+				<Folder size={20} />
+			{:else}
+				<Document size={20} />
+			{/if}
+			<span>{file.name}</span>
+		</div>
+		<div class="file-modified">{file.modified}</div>
+		<div class="file-size">{file.size}</div>
+		<div class="file-actions">
+			<button
+				class="action-button"
+				aria-label="More actions"
+				onclick={(e) => toggleMenu(file.name, e)}
+			>
+				<OverflowMenuVertical size={20} />
+			</button>
+
+			{#if openMenuId === file.name}
+				<div class="action-menu">
+					{#if isTrashMode}
+						<button class="menu-item restore-item" onclick={(e) => handleRestore(file, e)}>
+							<Undo size={16} />
+							<span>Restore</span>
+						</button>
+					{:else}
+						<button class="menu-item delete-item" onclick={(e) => handleDelete(file, e)}>
+							<TrashCan size={16} />
+							<span>Move to trash</span>
+						</button>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
 <svelte:window onclick={handleClickOutside} />
 
 <div class="file-list">
@@ -78,55 +139,8 @@
 		<div class="file-actions"></div>
 	</div>
 
-	{#each files as file}
-		<div
-			role="button"
-			tabindex="0"
-			class="file-row"
-			onclick={() => onFileClick(file)}
-			onkeydown={(e) => {
-				if (e.key === 'Enter' || e.key === ' ') {
-					e.preventDefault();
-					onFileClick(file);
-				}
-			}}
-		>
-			<div class="file-name">
-				{#if file.type === 'folder'}
-					<Folder size={20} />
-				{:else}
-					<Document size={20} />
-				{/if}
-				<span>{file.name}</span>
-			</div>
-			<div class="file-modified">{file.modified}</div>
-			<div class="file-size">{file.size}</div>
-			<div class="file-actions">
-				<button
-					class="action-button"
-					aria-label="More actions"
-					onclick={(e) => toggleMenu(file.name, e)}
-				>
-					<OverflowMenuVertical size={20} />
-				</button>
-
-				{#if openMenuId === file.name}
-					<div class="action-menu">
-						{#if isTrashMode}
-							<button class="menu-item restore-item" onclick={(e) => handleRestore(file, e)}>
-								<Undo size={16} />
-								<span>Restore</span>
-							</button>
-						{:else}
-							<button class="menu-item delete-item" onclick={(e) => handleDelete(file, e)}>
-								<TrashCan size={16} />
-								<span>Move to trash</span>
-							</button>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		</div>
+	{#each files as file (file.name)}
+		{@render file_render(file)}
 	{/each}
 </div>
 

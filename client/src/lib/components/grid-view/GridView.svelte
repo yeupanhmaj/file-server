@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo } from 'carbon-icons-svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { fileService } from '$lib';
 
 	let {
@@ -12,8 +14,14 @@
 
 	let openMenuId = $state<string | null>(null);
 
-	const onFileClick = (file: any) => {
-		console.log('Clicked file:', file);
+	const onFileClick = async (file: any) => {
+		if (file.type === 'folder') {
+			// Navigate using the folder's ID
+			await goto(resolve(`/folder/${file.id}`));
+		} else {
+			// TODO: Implement file preview/download
+			console.log('Clicked file:', file);
+		}
 	};
 
 	const toggleMenu = (fileId: string, event: MouseEvent) => {
@@ -31,7 +39,8 @@
 	const handleDelete = async (file: any, event: MouseEvent) => {
 		event.stopPropagation();
 
-		const filePath = constructFilePath(file.name);
+		// Use the path from the file object if available, otherwise construct it
+		const filePath = file.path || constructFilePath(file.name);
 		const confirmMsg = `Are you sure you want to move "${file.name}" to trash?`;
 
 		if (!confirm(confirmMsg)) {
@@ -71,7 +80,7 @@
 <svelte:window onclick={handleClickOutside} />
 
 <div class="file-grid">
-	{#each files as file}
+	{#each files as file (file.id || file.name)}
 		<div
 			class="file-card"
 			role="button"

@@ -1,8 +1,11 @@
 use crate::models::{
-    DeleteFileRequest, DownloadFileRequest, FileSystemItem, GetListFileAndFolderRequest,
-    RestoreFileRequest, TrashItem,
+    DeleteFileRequest, DownloadFileRequest, FileSystemItem, GetFolderByIdRequest,
+    GetListFileAndFolderRequest, RestoreFileRequest, TrashItem,
 };
-use crate::utils::{get_trash_directory, validate_and_resolve_path};
+use crate::utils::{
+    generate_id_from_path, get_base_directory_canonical, get_trash_directory, resolve_id_to_path,
+    validate_and_resolve_path,
+};
 use axum::{
     extract::Multipart,
     http::{header, StatusCode},
@@ -31,8 +34,8 @@ fn format_system_time(time: SystemTime) -> String {
     match time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => {
             let secs = duration.as_secs();
-            let datetime = chrono::DateTime::from_timestamp(secs as i64, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
+            let datetime =
+                chrono::DateTime::from_timestamp(secs as i64, 0).unwrap_or_else(chrono::Utc::now);
             datetime.format("%Y-%m-%d").to_string()
         }
         Err(_) => "Unknown".to_string(),
@@ -54,11 +57,23 @@ pub async fn get_list_file_and_folder(
 ) -> Result<Json<Vec<FileSystemItem>>, StatusCode> {
     let requested_path = req.path.as_deref().unwrap_or(".");
     let safe_path = validate_and_resolve_path(requested_path)?;
+    let base_dir = get_base_directory_canonical()?;
 
     let mut entries = tokio::fs::read_dir(&safe_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut items = Vec::new();
+
+    // Calculate parent ID (convert to relative path)
+    let current_path_relative = safe_path
+        .strip_prefix(&base_dir)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string());
+    let parent_id = if current_path_relative.is_empty() || current_path_relative == "." {
+        None
+    } else {
+        Some(generate_id_from_path(&current_path_relative))
+    };
 
     while let Some(entry) = entries
         .next_entry()
@@ -91,11 +106,117 @@ pub async fn get_list_file_and_folder(
             .map(format_system_time)
             .unwrap_or_else(|| "Unknown".to_string());
 
+        // Generate relative path from base directory
+        let item_path_relative = path
+            .strip_prefix(&base_dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| path.to_string_lossy().to_string());
+
+        let id = generate_id_from_path(&item_path_relative);
+
         items.push(FileSystemItem {
+            id,
             name,
             item_type: item_type.to_string(),
             modified,
             size,
+            parent_id: parent_id.clone(),
+            path: item_path_relative,
+        });
+    }
+
+    Ok(Json(items))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/folder",
+    request_body = GetFolderByIdRequest,
+    responses(
+        (status = 200, description = "List of files and folders in the folder", body = Vec<FileSystemItem>),
+        (status = 404, description = "Folder not found"),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_folder_by_id(
+    Json(req): Json<GetFolderByIdRequest>,
+) -> Result<Json<Vec<FileSystemItem>>, StatusCode> {
+    // Resolve the ID to a path
+    let folder_path = resolve_id_to_path(&req.folder_id).ok_or(StatusCode::NOT_FOUND)?;
+
+    // Use the existing logic from get_list_file_and_folder
+    let safe_path = validate_and_resolve_path(&folder_path)?;
+
+    // Verify it's a directory
+    if !safe_path.is_dir() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let base_dir = get_base_directory_canonical()?;
+    let mut entries = tokio::fs::read_dir(&safe_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut items = Vec::new();
+
+    // Calculate parent ID (convert to relative path)
+    let current_path_relative = safe_path
+        .strip_prefix(&base_dir)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string());
+    let parent_id = if current_path_relative.is_empty() || current_path_relative == "." {
+        None
+    } else {
+        Some(generate_id_from_path(&current_path_relative))
+    };
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip .trash directory
+        if name == ".trash" {
+            continue;
+        }
+
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let item_type = if path.is_dir() { "folder" } else { "file" };
+
+        let size = if path.is_dir() {
+            "-".to_string()
+        } else {
+            format_file_size(metadata.len())
+        };
+
+        let modified = metadata
+            .modified()
+            .ok()
+            .map(format_system_time)
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Generate relative path from base directory
+        let item_path_relative = path
+            .strip_prefix(&base_dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| path.to_string_lossy().to_string());
+
+        let id = generate_id_from_path(&item_path_relative);
+
+        items.push(FileSystemItem {
+            id,
+            name,
+            item_type: item_type.to_string(),
+            modified,
+            size,
+            parent_id: parent_id.clone(),
+            path: item_path_relative,
         });
     }
 

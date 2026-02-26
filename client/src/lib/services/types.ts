@@ -4,11 +4,18 @@ export interface GetListFileAndFolderRequest {
 	path?: string;
 }
 
+export interface GetFolderByIdRequest {
+	folder_id: string;
+}
+
 export interface FileSystemItem {
+	id: string;
 	name: string;
-	item_type: string;
+	type: string;
 	modified: string;
 	size: string;
+	parent_id?: string;
+	path: string;
 }
 
 export interface UploadFileRequest {
@@ -54,4 +61,3 @@ export interface TrashItem {
 	deleted_at: string;
 	size: string;
 }
-

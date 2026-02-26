@@ -14,7 +14,7 @@
 	};
 
 	const loadFiles = () => fileService.getListFileAndFolder({ path: currentPath });
-	
+
 	let filesPromise = $state(loadFiles());
 
 	const refreshFiles = () => {
