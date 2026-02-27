@@ -13,12 +13,42 @@
 	} from 'carbon-icons-svelte';
 	import { resolve } from '$app/paths';
 
-	import { Divider } from '$lib';
+	import { Divider, UploadDialog } from '$lib';
+	import { fileService } from '$lib';
 	import favicon from '$lib/assets/favicon.svg';
 	import { goto } from '$app/navigation';
+	import type { StorageStats } from '$lib/services/types';
 
 	let { children } = $props();
 	let searchQuery = $state('');
+	let showUploadDialog = $state(false);
+	let storageStats = $state<StorageStats | null>(null);
+
+	// Fetch storage stats on mount
+	$effect(() => {
+		const fetchStorage = async () => {
+			try {
+				storageStats = await fileService.getStorageStatsEndpoint();
+			} catch (error) {
+				console.error('Failed to fetch storage stats:', error);
+			}
+		};
+		fetchStorage();
+	});
+
+	// Determine current path for upload
+	const currentUploadPath = $derived(() => {
+		// If on home page, use root
+		if (page.url.pathname.startsWith('/home')) {
+			return '.';
+		}
+		// If on folder page, use current folder path (would need to be passed from child)
+		// For now, default to root
+
+		// TODO: We should ideally have a more robust way to determine current folder path,
+		// perhaps via a store or context
+		return '.';
+	});
 
 	const isActive = (path: string) => {
 		return page.url.pathname === path || page.url.pathname.startsWith(path + '/');
@@ -30,12 +60,28 @@
 			goto(resolve(`/search?q=${encodeURIComponent(searchQuery.trim())}`));
 		}
 	};
+
+	const handleUploadComplete = async () => {
+		// Refresh storage stats after upload
+		try {
+			storageStats = await fileService.getStorageStatsEndpoint();
+		} catch (error) {
+			console.error('Failed to refresh storage stats:', error);
+		}
+
+		// Trigger a page reload to show new files
+
+		// TODO: Ideally we would have a more elegant way to refresh
+		// the current folder view without a full reload
+		window.location.reload();
+	};
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+<!-- {TODO: consider create a separate layout component to reuse} -->
 <div class="app">
 	<!-- Header -->
 	<header class="header">
@@ -77,7 +123,7 @@
 		<!-- Sidebar -->
 
 		<aside class="sidebar">
-			<button class="new-button">
+			<button class="new-button" onclick={() => (showUploadDialog = true)}>
 				<CloudUpload size={20} />
 				<span>Upload</span>
 			</button>
@@ -106,7 +152,15 @@
 				<SettingsAdjust size={20} />
 				<div class="storage-text">
 					<div class="storage-label">Storage</div>
-					<div class="storage-usage">0 GB of 15 GB used</div>
+					<div class="storage-usage">
+						{#if storageStats}
+							{storageStats.used_formatted} of {storageStats.total_formatted} used ({storageStats.percentage.toFixed(
+								1
+							)}%)
+						{:else}
+							Loading...
+						{/if}
+					</div>
 				</div>
 			</div>
 		</aside>
@@ -116,6 +170,13 @@
 			{@render children()}
 		</main>
 	</div>
+
+	<!-- Upload Dialog -->
+	<UploadDialog
+		bind:isOpen={showUploadDialog}
+		currentPath={currentUploadPath()}
+		onUploadComplete={handleUploadComplete}
+	/>
 </div>
 
 <style>

@@ -6,7 +6,8 @@ import type {
 	DownloadFileRequest,
 	DeleteFileRequest,
 	TrashItem,
-	RestoreFileRequest
+	RestoreFileRequest,
+	StorageStats
 } from './types';
 
 export class FileService extends ServiceBase {
@@ -46,5 +47,9 @@ export class FileService extends ServiceBase {
 
 	async emptyTrash() {
 		return this.post<string>('/api/trash/empty');
+	}
+
+	async getStorageStatsEndpoint() {
+		return this.get<StorageStats>('/api/storage');
 	}
 }

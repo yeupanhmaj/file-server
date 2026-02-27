@@ -102,3 +102,12 @@ pub struct TrashItem {
     pub deleted_at: String,
     pub size: String,
 }
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct StorageStats {
+    pub used_bytes: u64,
+    pub total_bytes: u64,
+    pub used_formatted: String,
+    pub total_formatted: String,
+    pub percentage: f64,
+}

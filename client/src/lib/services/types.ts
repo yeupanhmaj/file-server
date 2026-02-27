@@ -72,3 +72,11 @@ export interface TrashItem {
 	size: string;
 }
 
+export interface StorageStats {
+	used_bytes: number;
+	total_bytes: number;
+	used_formatted: string;
+	total_formatted: string;
+	percentage: number;
+}
+

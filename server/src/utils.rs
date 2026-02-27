@@ -125,3 +125,47 @@ pub fn validate_and_resolve_path(requested_path: &str) -> Result<PathBuf, Status
         Err(StatusCode::FORBIDDEN)
     }
 }
+
+/// Calculate the total size of a directory recursively
+pub fn calculate_directory_size(path: &std::path::Path) -> std::io::Result<u64> {
+    let mut total_size = 0u64;
+
+    if path.is_file() {
+        return Ok(path.metadata()?.len());
+    }
+
+    if path.is_dir() {
+        let entries = fs::read_dir(path)?;
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file() {
+                total_size += entry_path.metadata()?.len();
+            } else if entry_path.is_dir() {
+                // Recursively calculate subdirectory size
+                total_size += calculate_directory_size(&entry_path)?;
+            }
+        }
+    }
+
+    Ok(total_size)
+}
+
+/// Get storage statistics for the base directory
+pub fn get_storage_stats() -> Result<(u64, u64), StatusCode> {
+    let base_dir = get_base_directory();
+
+    // Create base directory if it doesn't exist
+    if !base_dir.exists() {
+        std::fs::create_dir_all(&base_dir).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // Calculate used space
+    let used =
+        calculate_directory_size(&base_dir).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // For MVP, set a fixed quota (15 GB like Google Drive free tier)
+    // In production, this could come from a database or config per user
+    let total = 15 * 1024 * 1024 * 1024u64; // 15 GB in bytes
+
+    Ok((used, total))
+}

@@ -1,10 +1,10 @@
 use crate::models::{
     DeleteFileRequest, DownloadFileRequest, FileSystemItem, GetFolderByIdRequest,
-    GetListFileAndFolderRequest, RestoreFileRequest, TrashItem,
+    GetListFileAndFolderRequest, RestoreFileRequest, StorageStats, TrashItem,
 };
 use crate::utils::{
-    generate_id_from_path, get_base_directory_canonical, get_trash_directory, resolve_id_to_path,
-    validate_and_resolve_path,
+    generate_id_from_path, get_base_directory_canonical, get_storage_stats, get_trash_directory,
+    resolve_id_to_path, validate_and_resolve_path,
 };
 use axum::{
     extract::Multipart,
@@ -533,4 +533,32 @@ pub async fn empty_trash() -> Result<Json<String>, StatusCode> {
     }
 
     Ok(Json("Trash emptied successfully".to_string()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/storage",
+    responses(
+        (status = 200, description = "Storage statistics", body = StorageStats),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_storage_stats_endpoint() -> Result<Json<StorageStats>, StatusCode> {
+    let (used_bytes, total_bytes) = get_storage_stats()?;
+
+    let used_formatted = format_file_size(used_bytes);
+    let total_formatted = format_file_size(total_bytes);
+    let percentage = if total_bytes > 0 {
+        (used_bytes as f64 / total_bytes as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(Json(StorageStats {
+        used_bytes,
+        total_bytes,
+        used_formatted,
+        total_formatted,
+        percentage,
+    }))
 }

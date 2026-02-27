@@ -27,6 +27,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = join(__dirname, '../../server/src');
 const SERVICES_PATH = join(__dirname, '../src/lib/services');
 
+// Handle other primitives
+const typeMap = {
+	String: 'string',
+	i32: 'number',
+	u32: 'number',
+	f32: 'number',
+	i64: 'number',
+	u64: 'number',
+	f64: 'number',
+	bool: 'boolean',
+	usize: 'number'
+};
+
 // Extract routes from main.rs
 function extractRoutes() {
 	const mainRs = readFileSync(join(SERVER_PATH, 'main.rs'), 'utf-8');
@@ -85,15 +98,6 @@ function rustToTsType(rustType) {
 		return `${convertedInner}[]`;
 	}
 
-	const typeMap = {
-		String: 'string',
-		i32: 'number',
-		i64: 'number',
-		f32: 'number',
-		f64: 'number',
-		bool: 'boolean',
-		usize: 'number'
-	};
 	return typeMap[rustType] || rustType;
 }
 
@@ -111,16 +115,6 @@ function rustReturnTypeToTs(rustType) {
 
 	// Handle String -> string
 	if (rustType === 'String') return 'string';
-
-	// Handle other primitives
-	const typeMap = {
-		i32: 'number',
-		i64: 'number',
-		f32: 'number',
-		f64: 'number',
-		bool: 'boolean',
-		usize: 'number'
-	};
 
 	return typeMap[rustType] || rustType;
 }

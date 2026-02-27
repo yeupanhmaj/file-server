@@ -14,8 +14,8 @@ use utoipa_swagger_ui::SwaggerUi;
 use api_doc::ApiDoc;
 use endpoints::{
     create_folder, delete_file, download_file, empty_trash, get_folder_by_id,
-    get_list_file_and_folder, list_trash, rename_folder, restore_file, search_files,
-    sorted_list_file_and_folder, upload_file,
+    get_list_file_and_folder, get_storage_stats_endpoint, list_trash, rename_folder, restore_file,
+    search_files, sorted_list_file_and_folder, upload_file,
 };
 
 #[tokio::main]
@@ -60,5 +60,6 @@ fn route_builder() -> Router {
         .route("/api/trash", get(list_trash))
         .route("/api/trash/restore", post(restore_file))
         .route("/api/trash/empty", post(empty_trash))
+        .route("/api/storage", get(get_storage_stats_endpoint))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
 }
