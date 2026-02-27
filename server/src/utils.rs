@@ -41,10 +41,10 @@ pub fn resolve_id_to_path(id: &str) -> Option<String> {
 }
 
 /// Get the base directory for file operations
-/// This can be configured via environment variable or defaults to "./shared"
+/// This can be configured via environment variable or defaults to "./my-drive"
 pub fn get_base_directory() -> PathBuf {
     std::env::var("FILE_SERVER_ROOT")
-        .unwrap_or_else(|_| "./shared".to_string())
+        .unwrap_or_else(|_| "./my-drive".to_string())
         .into()
 }
 
