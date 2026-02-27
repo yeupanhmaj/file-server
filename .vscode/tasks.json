@@ -44,6 +44,23 @@
       }
     },
     {
+      "label": "Run Client (Windows)",
+      "type": "shell",
+      "command": "cd client; npm run dev",
+      "isBackground": true,   
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*error.*$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*vite.*$",
+          "endsPattern": "^.*Local:.*$"
+        }
+      }
+    },
+    {
       "label": "Run Server and Client",
       "dependsOn": ["Run Server", "Run Client"],
       "problemMatcher": []

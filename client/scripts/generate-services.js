@@ -90,31 +90,15 @@ function extractRequestTypes() {
 }
 
 // Map Rust types to TypeScript types
-function rustToTsType(rustType) {
-	// Handle Vec<Type> -> Type[]
-	if (rustType.startsWith('Vec<') && rustType.endsWith('>')) {
-		const innerType = rustType.slice(4, -1);
-		const convertedInner = rustToTsType(innerType);
-		return `${convertedInner}[]`;
-	}
-
-	return typeMap[rustType] || rustType;
-}
-
-// Convert Rust return type to TypeScript type
-function rustReturnTypeToTs(rustType) {
+function rustTypeToTsType(rustType) {
 	if (!rustType) return 'unknown';
 
 	// Handle Vec<Type> -> Type[]
 	if (rustType.startsWith('Vec<') && rustType.endsWith('>')) {
 		const innerType = rustType.slice(4, -1);
-		// Recursively convert the inner type
-		const convertedInner = rustReturnTypeToTs(innerType);
+		const convertedInner = rustTypeToTsType(innerType);
 		return `${convertedInner}[]`;
 	}
-
-	// Handle String -> string
-	if (rustType === 'String') return 'string';
 
 	return typeMap[rustType] || rustType;
 }
@@ -207,7 +191,7 @@ function generateInterfaces(types) {
 	for (const [typeName, fields] of Object.entries(types)) {
 		code += `export interface ${typeName} {\n`;
 		for (const field of fields) {
-			const tsType = rustToTsType(field.rustType);
+			const tsType = rustTypeToTsType(field.rustType);
 			const optional = field.optional ? '?' : '';
 			code += `	${field.name}${optional}: ${tsType};\n`;
 		}
@@ -231,7 +215,7 @@ function generateServiceMethods(routes, handlerTypes, returnTypes) {
 		const { path, method, handlerName } = route;
 		const requestType = handlerTypes[handlerName];
 		const rawReturnType = returnTypes[handlerName] || 'unknown';
-		const returnType = rustReturnTypeToTs(rawReturnType);
+		const returnType = rustTypeToTsType(rawReturnType);
 		const methodName = toCamelCase(handlerName);
 		const category = classifyEndpoint(handlerName);
 		const httpMethod = method.toLowerCase(); // 'get', 'post', 'delete', etc.
