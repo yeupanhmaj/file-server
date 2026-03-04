@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
 		Apps,
@@ -11,30 +12,15 @@
 		TrashCan,
 		UserAvatar
 	} from 'carbon-icons-svelte';
-	import { resolve } from '$app/paths';
 
-	import { Divider, UploadDialog } from '$lib';
-	import { fileService } from '$lib';
-	import favicon from '$lib/assets/favicon.svg';
 	import { goto } from '$app/navigation';
-	import type { StorageStats } from '$lib/services/types';
+	import { Divider, eventBus, FILE_UPLOADED, fileService, UploadDialog } from '$lib';
+	import favicon from '$lib/assets/favicon.svg';
 
 	let { children } = $props();
 	let searchQuery = $state('');
 	let showUploadDialog = $state(false);
-	let storageStats = $state<StorageStats | null>(null);
-
-	// Fetch storage stats on mount
-	$effect(() => {
-		const fetchStorage = async () => {
-			try {
-				storageStats = await fileService.getStorageStatsEndpoint();
-			} catch (error) {
-				console.error('Failed to fetch storage stats:', error);
-			}
-		};
-		fetchStorage();
-	});
+	let storageStats = $state(fileService.getStorageStatsEndpoint());
 
 	// Determine current path for upload
 	const currentUploadPath = $derived(() => {
@@ -63,17 +49,11 @@
 
 	const handleUploadComplete = async () => {
 		// Refresh storage stats after upload
-		try {
-			storageStats = await fileService.getStorageStatsEndpoint();
-		} catch (error) {
-			console.error('Failed to refresh storage stats:', error);
-		}
-
-		// Trigger a page reload to show new files
+		storageStats = fileService.getStorageStatsEndpoint();
 
 		// TODO: Ideally we would have a more elegant way to refresh
 		// the current folder view without a full reload
-		window.location.reload();
+		eventBus.emit(FILE_UPLOADED);
 	};
 </script>
 
@@ -153,13 +133,13 @@
 				<div class="storage-text">
 					<div class="storage-label">Storage</div>
 					<div class="storage-usage">
-						{#if storageStats}
-							{storageStats.used_formatted} of {storageStats.total_formatted} used ({storageStats.percentage.toFixed(
+						{#await storageStats}
+							Loading ...
+						{:then stats}
+							{stats.used_formatted} of {stats.total_formatted} used ({stats.percentage.toFixed(
 								1
 							)}%)
-						{:else}
-							Loading...
-						{/if}
+						{/await}
 					</div>
 				</div>
 			</div>

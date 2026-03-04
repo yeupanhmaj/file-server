@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fileService, GridView, ListView } from '$lib';
+	import { eventBus, FILE_UPLOADED, fileService, GridView, ListView } from '$lib';
 	import FolderViewContainer from '$lib/components/folder-view-container/FolderViewContainer.svelte';
 
 	let viewMode = $state<'grid' | 'list'>('list');
@@ -20,6 +20,10 @@
 	const refreshFiles = () => {
 		filesPromise = loadFiles();
 	};
+
+	eventBus.on(FILE_UPLOADED, () => {
+		refreshFiles();
+	});
 </script>
 
 <FolderViewContainer viewName="My Drive" {toggleView} {viewMode}>
