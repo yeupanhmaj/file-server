@@ -6,10 +6,8 @@ export class ServiceBase {
 	constructor() {
 		const baseURL = import.meta.env.VITE_API_URL;
 		this.axiosInstance = axios.create({
-			baseURL,
-			headers: {
-				'Content-Type': 'application/json'
-			}
+			baseURL
+			// Don't set default Content-Type - let each request set its own
 		});
 	}
 

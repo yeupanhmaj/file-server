@@ -80,3 +80,19 @@ export interface StorageStats {
 	percentage: number;
 }
 
+export interface ChunkedUploadRequest {
+	path?: string;
+	chunk: string;
+	file_id: string;
+	chunk_index: number;
+	total_chunks: number;
+	filename: string;
+}
+
+export interface ChunkedUploadResponse {
+	message: string;
+	chunk_index: number;
+	total_chunks: number;
+	completed: boolean;
+}
+

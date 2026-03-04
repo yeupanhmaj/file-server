@@ -29,6 +29,12 @@ export class FileService extends ServiceBase {
 		});
 	}
 
+	async uploadChunk(formData: FormData) {
+		return this.post<unknown>('/api/upload-chunk', formData, {
+			headers: { 'Content-Type': 'multipart/form-data' }
+		});
+	}
+
 	async downloadFile(request: DownloadFileRequest) {
 		return this.post<Blob>('/api/download', request, { responseType: 'blob' });
 	}

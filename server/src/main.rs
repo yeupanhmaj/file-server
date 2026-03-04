@@ -4,6 +4,7 @@ mod models;
 mod utils;
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
@@ -15,7 +16,7 @@ use api_doc::ApiDoc;
 use endpoints::{
     create_folder, delete_file, download_file, empty_trash, get_folder_by_id,
     get_list_file_and_folder, get_storage_stats_endpoint, list_trash, rename_folder, restore_file,
-    search_files, sorted_list_file_and_folder, upload_file,
+    search_files, sorted_list_file_and_folder, upload_chunk, upload_file,
 };
 
 #[tokio::main]
@@ -28,7 +29,11 @@ async fn main() {
         .allow_origin(Any) // For debugging. In production, use "http://example.com".parse().unwrap()
         .allow_methods(Any)
         .allow_headers(Any);
-    let app = route_builder().layer(cors);
+
+    // Set a 150MB body size limit for file uploads (allows 50MB chunks + multipart overhead)
+    let app = route_builder()
+        .layer(DefaultBodyLimit::max(150 * 1024 * 1024)) // 150 MB
+        .layer(cors);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
     println!("Server running on http://localhost:3000");
@@ -54,6 +59,7 @@ fn route_builder() -> Router {
         .route("/api/search", post(search_files))
         .route("/api/sort", post(sorted_list_file_and_folder))
         .route("/api/upload", post(upload_file))
+        .route("/api/upload-chunk", post(upload_chunk))
         .route("/api/download", post(download_file))
         .route("/api/delete", post(delete_file))
         .route("/api/rename-folder", post(rename_folder))

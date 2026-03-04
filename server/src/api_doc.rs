@@ -9,6 +9,7 @@ use utoipa::OpenApi;
         crate::endpoints::file::get_list_file_and_folder,
         crate::endpoints::file::get_folder_by_id,
         crate::endpoints::file::upload_file,
+        crate::endpoints::file::upload_chunk,
         crate::endpoints::file::download_file,
         crate::endpoints::file::delete_file,
         crate::endpoints::folder::sorted_list_file_and_folder
@@ -19,6 +20,8 @@ use utoipa::OpenApi;
             crate::models::RenameFolderRequest,
             crate::models::SearchRequest,
             crate::models::UploadFileRequest,
+            crate::models::ChunkedUploadRequest,
+            crate::models::ChunkedUploadResponse,
             crate::models::DownloadFileRequest,
             crate::models::DeleteFileRequest,
             crate::models::SortOptionRequest,

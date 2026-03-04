@@ -17,6 +17,8 @@
 	let isUploading = $state(false);
 	let uploadProgress = $state(0);
 	let errorMessage = $state('');
+	let currentFileIndex = $state(0);
+	let uploadStatusMessage = $state('');
 
 	const handleFileSelect = (e: Event) => {
 		const input = e.target as HTMLInputElement;
@@ -50,6 +52,38 @@
 		return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 	};
 
+	const uploadFileChunked = async (
+		file: File,
+		path: string,
+		onProgress?: (progress: number, chunkIndex: number, totalChunks: number) => void
+	) => {
+		const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB chunks
+		const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+		const fileId = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+		for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+			const start = chunkIndex * CHUNK_SIZE;
+			const end = Math.min(start + CHUNK_SIZE, file.size);
+			const chunk = file.slice(start, end);
+
+			const formData = new FormData();
+			formData.append('path', path);
+			formData.append('file_id', fileId);
+			formData.append('chunk_index', chunkIndex.toString());
+			formData.append('total_chunks', totalChunks.toString());
+			formData.append('filename', file.name);
+			// Don't add a filename to the chunk blob - send as raw binary data
+			formData.append('chunk', chunk);
+
+			await fileService.uploadChunk(formData);
+
+			if (onProgress) {
+				const progress = ((chunkIndex + 1) / totalChunks) * 100;
+				onProgress(progress, chunkIndex + 1, totalChunks);
+			}
+		}
+	};
+
 	const handleUpload = async () => {
 		if (selectedFiles.length === 0) {
 			errorMessage = 'Please select at least one file';
@@ -59,21 +93,58 @@
 		isUploading = true;
 		errorMessage = '';
 		uploadProgress = 0;
+		currentFileIndex = 0;
+		uploadStatusMessage = '';
 
 		try {
-			const formData = new FormData();
-			formData.append('path', currentPath);
+			const CHUNK_THRESHOLD = 50 * 1024 * 1024; // 50 MB
 
-			selectedFiles.forEach((file) => {
-				formData.append('files', file);
-			});
+			// Separate files into regular and chunked uploads
+			const regularFiles = selectedFiles.filter((file) => file.size <= CHUNK_THRESHOLD);
+			const largeFiles = selectedFiles.filter((file) => file.size > CHUNK_THRESHOLD);
 
-			await fileService.uploadFile(formData);
+			let completedFiles = 0;
+			const totalFiles = selectedFiles.length;
+
+			// Upload regular files (<= 50MB) together
+			if (regularFiles.length > 0) {
+				const formData = new FormData();
+				formData.append('path', currentPath);
+
+				regularFiles.forEach((file) => {
+					formData.append('files', file);
+				});
+
+				uploadStatusMessage = `Uploading ${regularFiles.length} file(s)...`;
+				await fileService.uploadFile(formData);
+				completedFiles += regularFiles.length;
+				uploadProgress = (completedFiles / totalFiles) * 100;
+			}
+
+			// Upload large files (> 50MB) with chunking
+			for (let i = 0; i < largeFiles.length; i++) {
+				const file = largeFiles[i];
+				currentFileIndex = completedFiles + i + 1;
+				uploadStatusMessage = `Uploading ${file.name} (${formatFileSize(file.size)})...`;
+
+				await uploadFileChunked(file, currentPath, (progress, chunkIndex, totalChunks) => {
+					// Calculate overall progress
+					const fileProgress = progress / 100;
+					const overallProgress = ((completedFiles + i + fileProgress) / totalFiles) * 100;
+					uploadProgress = overallProgress;
+					uploadStatusMessage = `Uploading ${file.name}: chunk ${chunkIndex}/${totalChunks} (${progress.toFixed(1)}%)`;
+				});
+
+				completedFiles++;
+				uploadProgress = (completedFiles / totalFiles) * 100;
+			}
 
 			uploadProgress = 100;
+			uploadStatusMessage = 'Upload complete!';
 			setTimeout(() => {
 				isOpen = false;
 				selectedFiles = [];
+				uploadStatusMessage = '';
 				onUploadComplete();
 			}, 500);
 		} catch (error) {
@@ -180,8 +251,14 @@
 				{/if}
 
 				{#if isUploading && uploadProgress > 0}
-					<div class="progress-bar">
-						<div class="progress-fill" style="width: {uploadProgress}%"></div>
+					<div class="upload-status">
+						{#if uploadStatusMessage}
+							<p class="status-message">{uploadStatusMessage}</p>
+						{/if}
+						<div class="progress-bar">
+							<div class="progress-fill" style="width: {uploadProgress}%"></div>
+						</div>
+						<p class="progress-text">{uploadProgress.toFixed(1)}%</p>
 					</div>
 				{/if}
 
@@ -386,18 +463,36 @@
 		cursor: not-allowed;
 	}
 
+	.upload-status {
+		margin-top: 24px;
+	}
+
+	.status-message {
+		margin: 0 0 8px 0;
+		font-size: 14px;
+		color: #202124;
+		font-weight: 500;
+	}
+
 	.progress-bar {
-		margin-top: 16px;
 		height: 4px;
 		background-color: #e0e0e0;
 		border-radius: 2px;
 		overflow: hidden;
+		margin-bottom: 8px;
 	}
 
 	.progress-fill {
 		height: 100%;
 		background-color: #1a73e8;
 		transition: width 0.3s;
+	}
+
+	.progress-text {
+		margin: 0;
+		font-size: 12px;
+		color: #5f6368;
+		text-align: right;
 	}
 
 	.error-message {

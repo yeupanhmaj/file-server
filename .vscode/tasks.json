@@ -28,7 +28,10 @@
       "options": {
         "shell": {
           "executable": "/bin/bash",
-          "args": ["-l", "-c"]
+          "args": [
+            "-l",
+            "-c"
+          ]
         }
       },
       "problemMatcher": {
@@ -47,7 +50,7 @@
       "label": "Run Client (Windows)",
       "type": "shell",
       "command": "cd client; npm run dev",
-      "isBackground": true,   
+      "isBackground": true,
       "problemMatcher": {
         "pattern": {
           "regexp": "^.*error.*$",
@@ -61,8 +64,19 @@
       }
     },
     {
-      "label": "Run Server and Client",
-      "dependsOn": ["Run Server", "Run Client"],
+      "label": "Start Dev",
+      "dependsOn": [
+        "Run Server",
+        "Run Client"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Dev (Windows)",
+      "dependsOn": [
+        "Run Server",
+        "Run Client (Windows)"
+      ],
       "problemMatcher": []
     }
   ]

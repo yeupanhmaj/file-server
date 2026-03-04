@@ -111,3 +111,30 @@ pub struct StorageStats {
     pub total_formatted: String,
     pub percentage: f64,
 }
+
+/// Schema for chunked file upload
+#[derive(Deserialize, ToSchema)]
+#[allow(unused)]
+pub struct ChunkedUploadRequest {
+    /// Target folder path where file will be uploaded
+    pub path: Option<String>,
+    /// File chunk data
+    #[schema(format = Binary, content_media_type = "application/octet-stream")]
+    pub chunk: String,
+    /// Unique identifier for the file being uploaded
+    pub file_id: String,
+    /// Current chunk index (0-based)
+    pub chunk_index: usize,
+    /// Total number of chunks
+    pub total_chunks: usize,
+    /// Original filename
+    pub filename: String,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct ChunkedUploadResponse {
+    pub message: String,
+    pub chunk_index: usize,
+    pub total_chunks: usize,
+    pub completed: bool,
+}

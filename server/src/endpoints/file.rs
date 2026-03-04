@@ -1,6 +1,6 @@
 use crate::models::{
-    DeleteFileRequest, DownloadFileRequest, FileSystemItem, GetFolderByIdRequest,
-    GetListFileAndFolderRequest, RestoreFileRequest, StorageStats, TrashItem,
+    ChunkedUploadResponse, DeleteFileRequest, DownloadFileRequest, FileSystemItem,
+    GetFolderByIdRequest, GetListFileAndFolderRequest, RestoreFileRequest, StorageStats, TrashItem,
 };
 use crate::utils::{
     generate_id_from_path, get_base_directory_canonical, get_storage_stats, get_trash_directory,
@@ -287,6 +287,175 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<String>, Statu
             uploaded_files.join(", ")
         )))
     }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/upload-chunk",
+    request_body(content = crate::models::ChunkedUploadRequest, content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "Chunk uploaded successfully", body = ChunkedUploadResponse),
+        (status = 400, description = "Bad request"),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn upload_chunk(
+    mut multipart: Multipart,
+) -> Result<Json<ChunkedUploadResponse>, StatusCode> {
+    let mut folder_path = String::from("."); // Default to current directory
+    let mut file_id = String::new();
+    let mut chunk_index: usize = 0;
+    let mut total_chunks: usize = 0;
+    let mut filename = String::new();
+    let mut chunk_data: Option<axum::body::Bytes> = None;
+
+    // Parse multipart fields
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        eprintln!("Error reading multipart field: {:?}", e);
+        StatusCode::BAD_REQUEST
+    })? {
+        let field_name = field.name().unwrap_or("").to_string();
+
+        match field_name.as_str() {
+            "path" => {
+                folder_path = field.text().await.map_err(|e| {
+                    eprintln!("Error reading path field: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+            }
+            "file_id" => {
+                file_id = field.text().await.map_err(|e| {
+                    eprintln!("Error reading file_id field: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+            }
+            "chunk_index" => {
+                let text = field.text().await.map_err(|e| {
+                    eprintln!("Error reading chunk_index field: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+                chunk_index = text.parse().map_err(|e| {
+                    eprintln!("Error parsing chunk_index '{}': {:?}", text, e);
+                    StatusCode::BAD_REQUEST
+                })?;
+            }
+            "total_chunks" => {
+                let text = field.text().await.map_err(|e| {
+                    eprintln!("Error reading total_chunks field: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+                total_chunks = text.parse().map_err(|e| {
+                    eprintln!("Error parsing total_chunks '{}': {:?}", text, e);
+                    StatusCode::BAD_REQUEST
+                })?;
+            }
+            "filename" => {
+                filename = field.text().await.map_err(|e| {
+                    eprintln!("Error reading filename field: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+            }
+            "chunk" => {
+                eprintln!("Reading chunk field...");
+                // Read chunk bytes - this might be a large field
+                let bytes = field.bytes().await.map_err(|e| {
+                    eprintln!("Error reading chunk bytes: {:?}", e);
+                    StatusCode::BAD_REQUEST
+                })?;
+                eprintln!("Successfully read {} bytes for chunk", bytes.len());
+                chunk_data = Some(bytes);
+            }
+            _ => {
+                eprintln!("Unknown field: {}", field_name);
+            }
+        }
+    }
+
+    // Validate required fields
+    if file_id.is_empty() || filename.is_empty() || chunk_data.is_none() {
+        eprintln!(
+            "Missing required fields - file_id: '{}', filename: '{}', chunk_data: {}",
+            file_id,
+            filename,
+            chunk_data.is_some()
+        );
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Validate the folder path
+    let safe_folder_path = validate_and_resolve_path(&folder_path)?;
+
+    // Create chunks directory in the base directory
+    let base_dir = get_base_directory_canonical()?;
+    let chunks_dir = base_dir.join(".chunks").join(&file_id);
+    tokio::fs::create_dir_all(&chunks_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Save the chunk
+    let chunk_file = chunks_dir.join(format!("chunk_{}", chunk_index));
+    tokio::fs::write(&chunk_file, chunk_data.unwrap())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Check if all chunks have been uploaded
+    let mut received_chunks = 0;
+    for i in 0..total_chunks {
+        let chunk_path = chunks_dir.join(format!("chunk_{}", i));
+        if chunk_path.exists() {
+            received_chunks += 1;
+        }
+    }
+
+    let completed = received_chunks == total_chunks;
+
+    // If all chunks received, merge them
+    if completed {
+        // Create the target directory
+        tokio::fs::create_dir_all(&safe_folder_path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let final_file_path = safe_folder_path.join(&filename);
+
+        // Validate the final file path
+        validate_and_resolve_path(&final_file_path.to_string_lossy())?;
+
+        // Merge chunks
+        let mut final_file = tokio::fs::File::create(&final_file_path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        for i in 0..total_chunks {
+            let chunk_path = chunks_dir.join(format!("chunk_{}", i));
+            let chunk_data = tokio::fs::read(&chunk_path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            use tokio::io::AsyncWriteExt;
+            final_file
+                .write_all(&chunk_data)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+
+        // Clean up chunks
+        tokio::fs::remove_dir_all(&chunks_dir)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json(ChunkedUploadResponse {
+        message: if completed {
+            format!("File '{}' uploaded successfully", filename)
+        } else {
+            format!("Chunk {}/{} uploaded", chunk_index + 1, total_chunks)
+        },
+        chunk_index,
+        total_chunks,
+        completed,
+    }))
 }
 
 #[utoipa::path(
