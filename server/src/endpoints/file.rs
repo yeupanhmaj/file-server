@@ -13,6 +13,7 @@ use axum::{
     Json,
 };
 use std::time::SystemTime;
+use tokio_util::io::ReaderStream;
 
 pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
@@ -311,75 +312,42 @@ pub async fn upload_chunk(
     let mut chunk_data: Option<axum::body::Bytes> = None;
 
     // Parse multipart fields
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        eprintln!("Error reading multipart field: {:?}", e);
-        StatusCode::BAD_REQUEST
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+    {
         let field_name = field.name().unwrap_or("").to_string();
 
         match field_name.as_str() {
             "path" => {
-                folder_path = field.text().await.map_err(|e| {
-                    eprintln!("Error reading path field: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
+                folder_path = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
             }
             "file_id" => {
-                file_id = field.text().await.map_err(|e| {
-                    eprintln!("Error reading file_id field: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
+                file_id = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
             }
             "chunk_index" => {
-                let text = field.text().await.map_err(|e| {
-                    eprintln!("Error reading chunk_index field: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
-                chunk_index = text.parse().map_err(|e| {
-                    eprintln!("Error parsing chunk_index '{}': {:?}", text, e);
-                    StatusCode::BAD_REQUEST
-                })?;
+                let text = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+                chunk_index = text.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
             }
             "total_chunks" => {
-                let text = field.text().await.map_err(|e| {
-                    eprintln!("Error reading total_chunks field: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
-                total_chunks = text.parse().map_err(|e| {
-                    eprintln!("Error parsing total_chunks '{}': {:?}", text, e);
-                    StatusCode::BAD_REQUEST
-                })?;
+                let text = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+                total_chunks = text.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
             }
             "filename" => {
-                filename = field.text().await.map_err(|e| {
-                    eprintln!("Error reading filename field: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
+                filename = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
             }
             "chunk" => {
-                eprintln!("Reading chunk field...");
                 // Read chunk bytes - this might be a large field
-                let bytes = field.bytes().await.map_err(|e| {
-                    eprintln!("Error reading chunk bytes: {:?}", e);
-                    StatusCode::BAD_REQUEST
-                })?;
-                eprintln!("Successfully read {} bytes for chunk", bytes.len());
+                let bytes = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
                 chunk_data = Some(bytes);
             }
-            _ => {
-                eprintln!("Unknown field: {}", field_name);
-            }
+            _ => {}
         }
     }
 
     // Validate required fields
     if file_id.is_empty() || filename.is_empty() || chunk_data.is_none() {
-        eprintln!(
-            "Missing required fields - file_id: '{}', filename: '{}', chunk_data: {}",
-            file_id,
-            filename,
-            chunk_data.is_some()
-        );
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -472,7 +440,8 @@ pub async fn upload_chunk(
 pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Response, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.file_path)?;
 
-    let contents = tokio::fs::read(&safe_path).await.map_err(|e| {
+    // Open file for streaming (doesn't load into memory)
+    let file = tokio::fs::File::open(&safe_path).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             StatusCode::NOT_FOUND
         } else {
@@ -480,20 +449,32 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
         }
     })?;
 
+    // Get file size for Content-Length header
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let file_size = metadata.len();
+
     // Extract just the filename for the download header
     let filename = safe_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("download");
 
+    // Convert file to stream
+    let stream = ReaderStream::new(file);
+    let body = axum::body::Body::from_stream(stream);
+
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_LENGTH, file_size.to_string())
         .header(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", filename),
         )
-        .body(axum::body::Body::from(contents))
+        .body(body)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(response)

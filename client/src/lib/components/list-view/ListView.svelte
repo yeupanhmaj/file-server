@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo } from 'carbon-icons-svelte';
+	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo, Download } from 'carbon-icons-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
@@ -20,8 +20,8 @@
 			// Navigate using the folder's ID
 			await goto(resolve(`/folder/${file.id}`));
 		} else {
-			// TODO: Implement file preview/download
-			console.log('Clicked file:', file);
+			// Download file on click
+			await handleDownload(file);
 		}
 	};
 
@@ -72,6 +72,39 @@
 		}
 	};
 
+	const handleDownload = async (file: any, event?: MouseEvent) => {
+		if (event) {
+			event.stopPropagation();
+		}
+
+		// Only download files, not folders
+		if (file.type === 'folder') {
+			return;
+		}
+
+		try {
+			const filePath = file.path || constructFilePath(file.name);
+			const blob = await fileService.downloadFile({ file_path: filePath });
+
+			// Create download link
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = file.name;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			window.URL.revokeObjectURL(url);
+
+			if (event) {
+				openMenuId = null;
+			}
+		} catch (error) {
+			console.error('Failed to download file:', error);
+			alert('Failed to download file');
+		}
+	};
+
 	// Close menu when clicking outside
 	const handleClickOutside = () => {
 		openMenuId = null;
@@ -118,6 +151,12 @@
 							<span>Restore</span>
 						</button>
 					{:else}
+						{#if file.type !== 'folder'}
+							<button class="menu-item" onclick={(e) => handleDownload(file, e)}>
+								<Download size={16} />
+								<span>Download</span>
+							</button>
+						{/if}
 						<button class="menu-item delete-item" onclick={(e) => handleDelete(file, e)}>
 							<TrashCan size={16} />
 							<span>Move to trash</span>
