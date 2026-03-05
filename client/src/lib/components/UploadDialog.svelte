@@ -17,7 +17,6 @@
 	let isUploading = $state(false);
 	let uploadProgress = $state(0);
 	let errorMessage = $state('');
-	let currentFileIndex = $state(0);
 	let uploadStatusMessage = $state('');
 
 	const handleFileSelect = (e: Event) => {
@@ -93,7 +92,6 @@
 		isUploading = true;
 		errorMessage = '';
 		uploadProgress = 0;
-		currentFileIndex = 0;
 		uploadStatusMessage = '';
 
 		try {
@@ -124,7 +122,6 @@
 			// Upload large files (> 50MB) with chunking
 			for (let i = 0; i < largeFiles.length; i++) {
 				const file = largeFiles[i];
-				currentFileIndex = completedFiles + i + 1;
 				uploadStatusMessage = `Uploading ${file.name} (${formatFileSize(file.size)})...`;
 
 				await uploadFileChunked(file, currentPath, (progress, chunkIndex, totalChunks) => {

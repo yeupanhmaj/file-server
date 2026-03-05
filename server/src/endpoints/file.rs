@@ -179,8 +179,8 @@ pub async fn get_folder_by_id(
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // Skip .trash directory
-        if name == ".trash" {
+        // Skip .trash and .chunks directories
+        if name == ".trash" || name == ".chunks" {
             continue;
         }
 
@@ -426,6 +426,48 @@ pub async fn upload_chunk(
     }))
 }
 
+// Helper function to detect MIME type based on file extension
+fn detect_mime_type(filename: &str) -> &'static str {
+    let extension = std::path::Path::new(filename)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+
+    match extension.to_lowercase().as_str() {
+        // Images
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        // Documents
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" => "application/javascript",
+        "json" => "application/json",
+        "xml" => "application/xml",
+        // Videos
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "ogg" => "video/ogg",
+        // Audio
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        // Archives
+        "zip" => "application/zip",
+        "rar" => "application/x-rar-compressed",
+        "7z" => "application/x-7z-compressed",
+        "tar" => "application/x-tar",
+        "gz" => "application/gzip",
+        // Default
+        _ => "application/octet-stream",
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/api/download",
@@ -462,13 +504,16 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
         .and_then(|n| n.to_str())
         .unwrap_or("download");
 
+    // Detect MIME type based on file extension
+    let mime_type = detect_mime_type(filename);
+
     // Convert file to stream
     let stream = ReaderStream::new(file);
     let body = axum::body::Body::from_stream(stream);
 
     let response = Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_TYPE, mime_type)
         .header(header::CONTENT_LENGTH, file_size.to_string())
         .header(
             header::CONTENT_DISPOSITION,

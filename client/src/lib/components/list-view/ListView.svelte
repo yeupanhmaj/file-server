@@ -2,8 +2,8 @@
 	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo, Download } from 'carbon-icons-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-
 	import { fileService } from '$lib';
+	import ImagePreview from '../image-preview/ImagePreview.svelte';
 
 	let {
 		files = [],
@@ -14,11 +14,24 @@
 	} = $props();
 
 	let openMenuId = $state<string | null>(null);
+	let previewOpen = $state(false);
+	let previewImageUrl = $state('');
+	let previewImageName = $state('');
+	let previewFile = $state<any>(null);
+
+	const isImageFile = (filename: string): boolean => {
+		const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+		const extension = filename.split('.').pop()?.toLowerCase();
+		return extension ? imageExtensions.includes(extension) : false;
+	};
 
 	const onFileClick = async (file: any) => {
 		if (file.type === 'folder') {
 			// Navigate using the folder's ID
 			await goto(resolve(`/folder/${file.id}`));
+		} else if (isImageFile(file.name)) {
+			// Show image preview
+			await handleImagePreview(file);
 		} else {
 			// Download file on click
 			await handleDownload(file);
@@ -69,6 +82,33 @@
 				console.error('Failed to restore file:', error);
 				alert('Failed to restore file');
 			}
+		}
+	};
+
+	const handleImagePreview = async (file: any) => {
+		try {
+			const filePath = file.path || constructFilePath(file.name);
+			const blob = await fileService.downloadFile({ file_path: filePath });
+			
+			// Create object URL for preview
+			const url = window.URL.createObjectURL(blob);
+			previewImageUrl = url;
+			previewImageName = file.name;
+			previewFile = file;
+			previewOpen = true;
+		} catch (error) {
+			console.error('Failed to load image preview:', error);
+			alert('Failed to load image preview');
+		}
+	};
+
+	const handlePreviewDownload = async () => {
+		if (previewFile) {
+			await handleDownload(previewFile);
+		}
+		// Clean up the object URL
+		if (previewImageUrl) {
+			window.URL.revokeObjectURL(previewImageUrl);
 		}
 	};
 
@@ -328,3 +368,10 @@
 		}
 	}
 </style>
+
+<ImagePreview
+	bind:isOpen={previewOpen}
+	imageUrl={previewImageUrl}
+	imageName={previewImageName}
+	onDownload={handlePreviewDownload}
+/>
