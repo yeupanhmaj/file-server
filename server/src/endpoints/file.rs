@@ -8,11 +8,12 @@ use crate::utils::{
 };
 use axum::{
     extract::Multipart,
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::Response,
     Json,
 };
 use std::time::SystemTime;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 pub fn format_file_size(size: u64) -> String {
@@ -468,18 +469,74 @@ fn detect_mime_type(filename: &str) -> &'static str {
     }
 }
 
+/// Parse Range header and return (start, end) bytes
+/// Format: "bytes=start-end" or "bytes=start-" or "bytes=-suffix"
+fn parse_range_header(range_header: &str, file_size: u64) -> Option<(u64, u64)> {
+    let range_header = range_header.trim();
+
+    // Check if it starts with "bytes="
+    if !range_header.starts_with("bytes=") {
+        return None;
+    }
+
+    let range_str = &range_header[6..]; // Skip "bytes="
+
+    // Split by comma (take only first range for simplicity)
+    let first_range = range_str.split(',').next()?.trim();
+
+    if let Some((start_str, end_str)) = first_range.split_once('-') {
+        let start_str = start_str.trim();
+        let end_str = end_str.trim();
+
+        if start_str.is_empty() && !end_str.is_empty() {
+            // Suffix range: "-500" means last 500 bytes
+            if let Ok(suffix_length) = end_str.parse::<u64>() {
+                let start = file_size.saturating_sub(suffix_length);
+                return Some((start, file_size - 1));
+            }
+        } else if !start_str.is_empty() {
+            // Normal range or open-ended range
+            if let Ok(start) = start_str.parse::<u64>() {
+                if start >= file_size {
+                    return None; // Invalid range
+                }
+
+                let end = if end_str.is_empty() {
+                    file_size - 1 // Open-ended: "500-"
+                } else {
+                    end_str
+                        .parse::<u64>()
+                        .unwrap_or(file_size - 1)
+                        .min(file_size - 1)
+                };
+
+                if start <= end {
+                    return Some((start, end));
+                }
+            }
+        }
+    }
+
+    None
+}
+
 #[utoipa::path(
     post,
     path = "/api/download",
     request_body = DownloadFileRequest,
     responses(
         (status = 200, description = "File content", content_type = "application/octet-stream"),
+        (status = 206, description = "Partial content", content_type = "application/octet-stream"),
         (status = 403, description = "Forbidden - path outside allowed directory"),
         (status = 404, description = "File not found"),
+        (status = 416, description = "Range not satisfiable"),
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Response, StatusCode> {
+pub async fn download_file(
+    headers: HeaderMap,
+    Json(req): Json<DownloadFileRequest>,
+) -> Result<Response, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.file_path)?;
 
     // Open file for streaming (doesn't load into memory)
@@ -507,7 +564,55 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
     // Detect MIME type based on file extension
     let mime_type = detect_mime_type(filename);
 
-    // Convert file to stream
+    // Check for Range header
+    let range_header = headers.get(header::RANGE).and_then(|h| h.to_str().ok());
+
+    // Build response based on whether Range header is present
+    if let Some(range_str) = range_header {
+        // Parse range
+        if let Some((start, end)) = parse_range_header(range_str, file_size) {
+            let content_length = end - start + 1;
+
+            // Seek to start position
+            let mut file = file;
+            file.seek(std::io::SeekFrom::Start(start))
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            // Create limited reader for the range
+            let limited_file = file.take(content_length);
+            let stream = ReaderStream::new(limited_file);
+            let body = axum::body::Body::from_stream(stream);
+
+            let response = Response::builder()
+                .status(StatusCode::PARTIAL_CONTENT)
+                .header(header::CONTENT_TYPE, mime_type)
+                .header(header::CONTENT_LENGTH, content_length.to_string())
+                .header(
+                    header::CONTENT_RANGE,
+                    format!("bytes {}-{}/{}", start, end, file_size),
+                )
+                .header(header::ACCEPT_RANGES, "bytes")
+                .header(
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", filename),
+                )
+                .body(body)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            return Ok(response);
+        } else {
+            // Invalid range request
+            let response = Response::builder()
+                .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                .header(header::CONTENT_RANGE, format!("bytes */{}", file_size))
+                .body(axum::body::Body::empty())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Ok(response);
+        }
+    }
+
+    // No Range header - return full file
     let stream = ReaderStream::new(file);
     let body = axum::body::Body::from_stream(stream);
 
@@ -515,6 +620,7 @@ pub async fn download_file(Json(req): Json<DownloadFileRequest>) -> Result<Respo
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, mime_type)
         .header(header::CONTENT_LENGTH, file_size.to_string())
+        .header(header::ACCEPT_RANGES, "bytes")
         .header(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", filename),
