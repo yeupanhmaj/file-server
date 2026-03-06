@@ -5,14 +5,14 @@ use utoipa::OpenApi;
     paths(
         crate::endpoints::folder::create_folder,
         crate::endpoints::folder::rename_folder,
-        crate::endpoints::folder::search_files,
+        crate::endpoints::file::search_files,
         crate::endpoints::file::get_list_file_and_folder,
         crate::endpoints::file::get_folder_by_id,
         crate::endpoints::file::upload_file,
         crate::endpoints::file::upload_chunk,
         crate::endpoints::file::download_file,
         crate::endpoints::file::delete_file,
-        crate::endpoints::folder::sorted_list_file_and_folder
+        crate::endpoints::file::sorted_list_file_and_folder
     ),
     components(
         schemas(
