@@ -8,7 +8,7 @@ use crate::utils::{
     resolve_id_to_path, validate_and_resolve_path,
 };
 use axum::{
-    extract::Multipart,
+    extract::{Multipart, Query},
     http::{header, HeaderMap, StatusCode},
     response::Response,
     Json,
@@ -1263,9 +1263,12 @@ fn copy_dir_recursive<'a>(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/api/thumbnail",
-    request_body = ThumbnailRequest,
+    params(
+        ("file_path" = String, Query, description = "Path to the image file"),
+        ("size" = Option<u32>, Query, description = "Thumbnail size in pixels (default: 200)")
+    ),
     responses(
         (status = 200, description = "Thumbnail image", content_type = "image/jpeg"),
         (status = 400, description = "Not an image file"),
@@ -1274,7 +1277,7 @@ fn copy_dir_recursive<'a>(
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn get_thumbnail(Json(req): Json<ThumbnailRequest>) -> Result<Response, StatusCode> {
+pub async fn get_thumbnail(Query(req): Query<ThumbnailRequest>) -> Result<Response, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.file_path)?;
 
     // Check if file exists

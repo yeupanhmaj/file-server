@@ -8,7 +8,6 @@ import type {
 	RenameFileRequest,
 	MoveFileRequest,
 	CopyFileRequest,
-	ThumbnailRequest,
 	TrashItem,
 	RestoreFileRequest,
 	StorageStats
@@ -59,8 +58,8 @@ export class FileService extends ServiceBase {
 		return this.post<string>('/api/copy-file', request);
 	}
 
-	async getThumbnail(request: ThumbnailRequest) {
-		return this.post<Blob>('/api/thumbnail', request);
+	async getThumbnail() {
+		return this.get<Blob>('/api/thumbnail');
 	}
 
 	async listTrash() {

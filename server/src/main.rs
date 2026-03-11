@@ -67,7 +67,7 @@ fn route_builder() -> Router {
         .route("/api/rename-folder", post(rename_folder))
         .route("/api/move-file", post(move_file))
         .route("/api/copy-file", post(copy_file))
-        .route("/api/thumbnail", post(get_thumbnail))
+        .route("/api/thumbnail", get(get_thumbnail))
         .route("/api/trash", get(list_trash))
         .route("/api/trash/restore", post(restore_file))
         .route("/api/trash/empty", post(empty_trash))

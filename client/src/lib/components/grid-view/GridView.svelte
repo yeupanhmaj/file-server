@@ -31,7 +31,6 @@
 	let previewImageUrl = $state('');
 	let previewImageName = $state('');
 	let previewFile = $state<FileSystemItem | null>(null);
-	let thumbnailCache = $state<Record<string, string>>({});
 
 	const isImageFile = (filename: string): boolean => {
 		const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
@@ -164,38 +163,15 @@
 		openMenuId = null;
 	};
 
-	// Load thumbnail for an image file
-	const loadThumbnail = async (file: FileSystemItem): Promise<void> => {
+	// Generate thumbnail URL for an image file
+	const getThumbnailUrl = (file: FileSystemItem): string | null => {
 		if (file.item_type === 'folder' || !isImageFile(file.name)) {
-			return;
+			return null;
 		}
 
 		const filePath = file.path || constructFilePath(file.name);
-
-		// Check cache first
-		if (thumbnailCache[filePath]) {
-			return;
-		}
-
-		try {
-			const blob = await fileService.getThumbnail({ file_path: filePath, size: 200 });
-			const url = window.URL.createObjectURL(blob);
-
-			// Update cache reactively
-			thumbnailCache = { ...thumbnailCache, [filePath]: url };
-		} catch (error) {
-			console.error('Failed to load thumbnail:', error);
-		}
+		return `/api/thumbnail?file_path=${encodeURIComponent(filePath)}&size=200`;
 	};
-
-	// Preload thumbnails for visible files
-	$effect(() => {
-		files.forEach((file) => {
-			if (file.item_type !== 'folder' && isImageFile(file.name)) {
-				loadThumbnail(file);
-			}
-		});
-	});
 </script>
 
 <svelte:window onclick={handleClickOutside} />
@@ -214,15 +190,13 @@
 				}
 			}}
 		>
-			{console.log('Rendering file:', file)}
 			<div class="file-icon">
 				{#if file.item_type === 'folder'}
 					<Folder size={32} />
 				{:else if isImageFile(file.name)}
-				{@const filePath = file.path || constructFilePath(file.name)}
-				{console.log('cache', thumbnailCache)}
-					{#if thumbnailCache[filePath]}
-						<img src={thumbnailCache[filePath]} alt={file.name} class="thumbnail" />
+					{@const thumbnailUrl = getThumbnailUrl(file)}
+					{#if thumbnailUrl}
+						<img src={thumbnailUrl} alt={file.name} class="thumbnail" loading="lazy" />
 					{:else}
 						<Document size={32} />
 					{/if}
