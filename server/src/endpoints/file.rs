@@ -87,8 +87,8 @@ pub async fn get_list_file_and_folder(
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // Skip .trash directory
-        if name == ".trash" {
+        // skip name start with . to hide hidden files and folders, also skip .trash and .chunks directories
+        if name.starts_with('.') {
             continue;
         }
 
