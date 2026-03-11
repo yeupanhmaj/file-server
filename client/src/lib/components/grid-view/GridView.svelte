@@ -9,7 +9,7 @@
 	} from 'carbon-icons-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { fileService } from '$lib';
+	import { fileService, type FileSystemItem } from '$lib';
 	import ImagePreview from '../image-preview/ImagePreview.svelte';
 
 	let {
@@ -18,13 +18,20 @@
 		onRefresh = () => {},
 		isTrashMode = false,
 		onRestore = undefined
+	}: {
+		files: FileSystemItem[];
+		currentPath: string;
+		onRefresh: () => void;
+		isTrashMode?: boolean;
+		onRestore?: (fileId: string) => Promise<void>;
 	} = $props();
 
 	let openMenuId = $state<string | null>(null);
-	let previewOpen = $state(false);
+	let previewOpen = $state(false); 
 	let previewImageUrl = $state('');
 	let previewImageName = $state('');
-	let previewFile = $state<any>(null);
+	let previewFile = $state<FileSystemItem | null>(null);
+	let thumbnailCache = $state<Record<string, string>>({});
 
 	const isImageFile = (filename: string): boolean => {
 		const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
@@ -32,8 +39,8 @@
 		return extension ? imageExtensions.includes(extension) : false;
 	};
 
-	const onFileClick = async (file: any) => {
-		if (file.type === 'folder') {
+	const onFileClick = async (file: FileSystemItem) => {
+		if (file.item_type === 'folder') {
 			// Navigate using the folder's ID
 			await goto(resolve(`/folder/${file.id}`));
 		} else if (isImageFile(file.name)) {
@@ -92,7 +99,7 @@
 		}
 	};
 
-	const handleImagePreview = async (file: any) => {
+	const handleImagePreview = async (file: FileSystemItem) => {
 		try {
 			const filePath = file.path || constructFilePath(file.name);
 			const blob = await fileService.downloadFile({ file_path: filePath });
@@ -156,6 +163,39 @@
 	const handleClickOutside = () => {
 		openMenuId = null;
 	};
+
+	// Load thumbnail for an image file
+	const loadThumbnail = async (file: FileSystemItem): Promise<void> => {
+		if (file.item_type === 'folder' || !isImageFile(file.name)) {
+			return;
+		}
+
+		const filePath = file.path || constructFilePath(file.name);
+
+		// Check cache first
+		if (thumbnailCache[filePath]) {
+			return;
+		}
+
+		try {
+			const blob = await fileService.getThumbnail({ file_path: filePath, size: 200 });
+			const url = window.URL.createObjectURL(blob);
+
+			// Update cache reactively
+			thumbnailCache = { ...thumbnailCache, [filePath]: url };
+		} catch (error) {
+			console.error('Failed to load thumbnail:', error);
+		}
+	};
+
+	// Preload thumbnails for visible files
+	$effect(() => {
+		files.forEach((file) => {
+			if (file.item_type !== 'folder' && isImageFile(file.name)) {
+				loadThumbnail(file);
+			}
+		});
+	});
 </script>
 
 <svelte:window onclick={handleClickOutside} />
@@ -174,9 +214,18 @@
 				}
 			}}
 		>
+			{console.log('Rendering file:', file)}
 			<div class="file-icon">
-				{#if file.type === 'folder'}
+				{#if file.item_type === 'folder'}
 					<Folder size={32} />
+				{:else if isImageFile(file.name)}
+				{@const filePath = file.path || constructFilePath(file.name)}
+				{console.log('cache', thumbnailCache)}
+					{#if thumbnailCache[filePath]}
+						<img src={thumbnailCache[filePath]} alt={file.name} class="thumbnail" />
+					{:else}
+						<Document size={32} />
+					{/if}
 				{:else}
 					<Document size={32} />
 				{/if}
@@ -199,7 +248,7 @@
 								<span>Restore</span>
 							</button>
 						{:else}
-							{#if file.type !== 'folder'}
+							{#if file.item_type !== 'folder'}
 								<button class="menu-item" onclick={(e) => handleDownload(file, e)}>
 									<Download size={16} />
 									<span>Download</span>
@@ -249,6 +298,13 @@
 		justify-content: center;
 		height: 80px;
 		color: #5f6368;
+	}
+
+	.thumbnail {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+		border-radius: 4px;
 	}
 
 	.file-info {

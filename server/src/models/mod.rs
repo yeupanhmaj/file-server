@@ -16,7 +16,6 @@ pub struct GetFolderByIdRequest {
 pub struct FileSystemItem {
     pub id: String,
     pub name: String,
-    #[serde(rename = "type")]
     pub item_type: String,
     pub modified: String,
     pub size: String,
@@ -155,4 +154,15 @@ pub struct MoveFileRequest {
 pub struct CopyFileRequest {
     pub file_path: String,
     pub destination: String,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct ThumbnailRequest {
+    pub file_path: String,
+    #[serde(default = "default_thumbnail_size")]
+    pub size: u32,
+}
+
+fn default_thumbnail_size() -> u32 {
+    200
 }

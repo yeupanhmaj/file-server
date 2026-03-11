@@ -1,7 +1,7 @@
 use crate::models::{
     ChunkedUploadResponse, CopyFileRequest, DeleteFileRequest, DownloadFileRequest, FileSystemItem,
     GetFolderByIdRequest, GetListFileAndFolderRequest, MoveFileRequest, RenameFileRequest,
-    RestoreFileRequest, StorageStats, TrashItem,
+    RestoreFileRequest, SearchRequest, SearchResponse, StorageStats, ThumbnailRequest, TrashItem,
 };
 use crate::utils::{
     generate_id_from_path, get_base_directory_canonical, get_storage_stats, get_trash_directory,
@@ -13,6 +13,7 @@ use axum::{
     response::Response,
     Json,
 };
+use image::GenericImageView;
 use std::time::SystemTime;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
@@ -875,16 +876,16 @@ pub async fn get_storage_stats_endpoint() -> Result<Json<StorageStats>, StatusCo
 #[utoipa::path(
     post,
     path = "/api/search",
-    request_body = crate::models::SearchRequest,
+    request_body = SearchRequest,
     responses(
-        (status = 200, description = "File search results", body = crate::models::SearchResponse),
+        (status = 200, description = "File search results", body = SearchResponse),
         (status = 403, description = "Forbidden - path outside allowed directory"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub async fn search_files(
-    Json(req): Json<crate::models::SearchRequest>,
-) -> Result<Json<crate::models::SearchResponse>, StatusCode> {
+    Json(req): Json<SearchRequest>,
+) -> Result<Json<SearchResponse>, StatusCode> {
     let safe_path = validate_and_resolve_path(&req.path)?;
     let base_dir = get_base_directory_canonical()?;
     let search_term = req.search_string.to_lowercase();
@@ -1259,4 +1260,119 @@ fn copy_dir_recursive<'a>(
 
         Ok(())
     })
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/thumbnail",
+    request_body = ThumbnailRequest,
+    responses(
+        (status = 200, description = "Thumbnail image", content_type = "image/jpeg"),
+        (status = 400, description = "Not an image file"),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 404, description = "File not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_thumbnail(Json(req): Json<ThumbnailRequest>) -> Result<Response, StatusCode> {
+    let safe_path = validate_and_resolve_path(&req.file_path)?;
+
+    // Check if file exists
+    if !safe_path.exists() || !safe_path.is_file() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Check if it's an image file
+    let extension = safe_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+
+    if !matches!(
+        extension.as_str(),
+        "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp"
+    ) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Get base directory and create thumbnails directory
+    let base_dir = get_base_directory_canonical()?;
+    let thumbnails_dir = base_dir.join(".thumbnails");
+    tokio::fs::create_dir_all(&thumbnails_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Generate thumbnail cache filename based on original path and size
+    let relative_path = safe_path
+        .strip_prefix(&base_dir)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| safe_path.to_string_lossy().to_string());
+
+    let cache_key = format!("{}_{}", generate_id_from_path(&relative_path), req.size);
+    let thumbnail_path = thumbnails_dir.join(format!("{}.jpg", cache_key));
+
+    // Check if thumbnail already exists in cache
+    if !thumbnail_path.exists() {
+        // Generate thumbnail
+        generate_thumbnail(&safe_path, &thumbnail_path, req.size).await?;
+    }
+
+    // Read and return thumbnail
+    let thumbnail_data = tokio::fs::read(&thumbnail_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "image/jpeg")
+        .header(header::CONTENT_LENGTH, thumbnail_data.len().to_string())
+        .header(header::CACHE_CONTROL, "public, max-age=31536000") // Cache for 1 year
+        .body(axum::body::Body::from(thumbnail_data))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(response)
+}
+
+// Helper function to generate thumbnail
+async fn generate_thumbnail(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+    size: u32,
+) -> Result<(), StatusCode> {
+    // Clone paths for the blocking task
+    let source = source.to_path_buf();
+    let destination = destination.to_path_buf();
+
+    // Run image processing in a blocking task (CPU-intensive)
+    tokio::task::spawn_blocking(move || {
+        // Load image
+        let img = image::open(&source).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Calculate thumbnail dimensions (maintain aspect ratio)
+        let (width, height) = img.dimensions();
+        let (thumb_width, thumb_height) = if width > height {
+            let thumb_height = (size as f32 * height as f32 / width as f32) as u32;
+            (size, thumb_height)
+        } else {
+            let thumb_width = (size as f32 * width as f32 / height as f32) as u32;
+            (thumb_width, size)
+        };
+
+        // Resize image using Lanczos3 filter (high quality)
+        let thumbnail = img.resize(
+            thumb_width,
+            thumb_height,
+            image::imageops::FilterType::Lanczos3,
+        );
+
+        // Save as JPEG with quality 85
+        thumbnail
+            .save_with_format(&destination, image::ImageFormat::Jpeg)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        Ok::<(), StatusCode>(())
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }

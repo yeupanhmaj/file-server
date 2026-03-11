@@ -1,8 +1,15 @@
 <script lang="ts">
-	import { Folder, Document, OverflowMenuVertical, TrashCan, Undo, Download } from 'carbon-icons-svelte';
+	import {
+		Folder,
+		Document,
+		OverflowMenuVertical,
+		TrashCan,
+		Undo,
+		Download
+	} from 'carbon-icons-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { fileService } from '$lib';
+	import { fileService, type FileSystemItem } from '$lib';
 	import ImagePreview from '../image-preview/ImagePreview.svelte';
 
 	let {
@@ -11,13 +18,19 @@
 		onRefresh = () => {},
 		isTrashMode = false,
 		onRestore = undefined
+	}: {
+		files: FileSystemItem[];
+		currentPath: string;
+		onRefresh: () => void;
+		isTrashMode?: boolean;
+		onRestore?: (fileId: string) => Promise<void>;
 	} = $props();
 
 	let openMenuId = $state<string | null>(null);
 	let previewOpen = $state(false);
 	let previewImageUrl = $state('');
 	let previewImageName = $state('');
-	let previewFile = $state<any>(null);
+	let previewFile = $state<FileSystemItem | null>(null);
 
 	const isImageFile = (filename: string): boolean => {
 		const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
@@ -25,8 +38,8 @@
 		return extension ? imageExtensions.includes(extension) : false;
 	};
 
-	const onFileClick = async (file: any) => {
-		if (file.type === 'folder') {
+	const onFileClick = async (file: FileSystemItem) => {
+		if (file.item_type === 'folder') {
 			// Navigate using the folder's ID
 			await goto(resolve(`/folder/${file.id}`));
 		} else if (isImageFile(file.name)) {
@@ -50,7 +63,7 @@
 		return `${currentPath}/${fileName}`;
 	};
 
-	const handleDelete = async (file: any, event: MouseEvent) => {
+	const handleDelete = async (file: FileSystemItem, event: MouseEvent) => {
 		event.stopPropagation();
 
 		// Use the path from the file object if available, otherwise construct it
@@ -71,7 +84,7 @@
 		}
 	};
 
-	const handleRestore = async (file: any, event: MouseEvent) => {
+	const handleRestore = async (file: FileSystemItem, event: MouseEvent) => {
 		event.stopPropagation();
 
 		if (onRestore) {
@@ -85,11 +98,11 @@
 		}
 	};
 
-	const handleImagePreview = async (file: any) => {
+	const handleImagePreview = async (file: FileSystemItem) => {
 		try {
 			const filePath = file.path || constructFilePath(file.name);
 			const blob = await fileService.downloadFile({ file_path: filePath });
-			
+
 			// Create object URL for preview
 			const url = window.URL.createObjectURL(blob);
 			previewImageUrl = url;
@@ -112,13 +125,13 @@
 		}
 	};
 
-	const handleDownload = async (file: any, event?: MouseEvent) => {
+	const handleDownload = async (file: FileSystemItem, event?: MouseEvent) => {
 		if (event) {
 			event.stopPropagation();
 		}
 
 		// Only download files, not folders
-		if (file.type === 'folder') {
+		if (file.item_type === 'folder') {
 			return;
 		}
 
@@ -151,7 +164,7 @@
 	};
 </script>
 
-{#snippet file_render(file: any)}
+{#snippet file_render(file: FileSystemItem)}
 	<div
 		role="button"
 		tabindex="0"
@@ -165,7 +178,7 @@
 		}}
 	>
 		<div class="file-name">
-			{#if file.type === 'folder'}
+			{#if file.item_type === 'folder'}
 				<Folder size={20} />
 			{:else}
 				<Document size={20} />
@@ -191,7 +204,7 @@
 							<span>Restore</span>
 						</button>
 					{:else}
-						{#if file.type !== 'folder'}
+						{#if file.item_type !== 'folder'}
 							<button class="menu-item" onclick={(e) => handleDownload(file, e)}>
 								<Download size={16} />
 								<span>Download</span>
@@ -222,6 +235,13 @@
 		{@render file_render(file)}
 	{/each}
 </div>
+
+<ImagePreview
+	bind:isOpen={previewOpen}
+	imageUrl={previewImageUrl}
+	imageName={previewImageName}
+	onDownload={handlePreviewDownload}
+/>
 
 <style>
 	.file-list {
@@ -368,10 +388,3 @@
 		}
 	}
 </style>
-
-<ImagePreview
-	bind:isOpen={previewOpen}
-	imageUrl={previewImageUrl}
-	imageName={previewImageName}
-	onDownload={handlePreviewDownload}
-/>

@@ -5,6 +5,10 @@ import type {
 	GetFolderByIdRequest,
 	DownloadFileRequest,
 	DeleteFileRequest,
+	RenameFileRequest,
+	MoveFileRequest,
+	CopyFileRequest,
+	ThumbnailRequest,
 	TrashItem,
 	RestoreFileRequest,
 	StorageStats
@@ -41,6 +45,22 @@ export class FileService extends ServiceBase {
 
 	async deleteFile(request: DeleteFileRequest) {
 		return this.post<string>('/api/delete', request);
+	}
+
+	async renameFile(request: RenameFileRequest) {
+		return this.post<string>('/api/rename-file', request);
+	}
+
+	async moveFile(request: MoveFileRequest) {
+		return this.post<string>('/api/move-file', request);
+	}
+
+	async copyFile(request: CopyFileRequest) {
+		return this.post<string>('/api/copy-file', request);
+	}
+
+	async getThumbnail(request: ThumbnailRequest) {
+		return this.post<Blob>('/api/thumbnail', request);
 	}
 
 	async listTrash() {

@@ -16,6 +16,7 @@ use utoipa::OpenApi;
         crate::endpoints::file::rename_file,
         crate::endpoints::file::move_file,
         crate::endpoints::file::copy_file,
+        crate::endpoints::file::get_thumbnail,
         crate::endpoints::file::list_trash,
         crate::endpoints::file::restore_file,
         crate::endpoints::file::empty_trash,
@@ -38,6 +39,7 @@ use utoipa::OpenApi;
             crate::models::RenameFileRequest,
             crate::models::MoveFileRequest,
             crate::models::CopyFileRequest,
+            crate::models::ThumbnailRequest,
             crate::models::RestoreFileRequest,
             crate::models::TrashItem,
             crate::models::StorageStats

@@ -96,3 +96,23 @@ export interface ChunkedUploadResponse {
 	completed: boolean;
 }
 
+export interface RenameFileRequest {
+	file_path: string;
+	new_name: string;
+}
+
+export interface MoveFileRequest {
+	file_path: string;
+	destination: string;
+}
+
+export interface CopyFileRequest {
+	file_path: string;
+	destination: string;
+}
+
+export interface ThumbnailRequest {
+	file_path: string;
+	size: number;
+}
+
