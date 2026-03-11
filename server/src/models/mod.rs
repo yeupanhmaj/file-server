@@ -138,3 +138,21 @@ pub struct ChunkedUploadResponse {
     pub total_chunks: usize,
     pub completed: bool,
 }
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct RenameFileRequest {
+    pub file_path: String,
+    pub new_name: String,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct MoveFileRequest {
+    pub file_path: String,
+    pub destination: String,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct CopyFileRequest {
+    pub file_path: String,
+    pub destination: String,
+}

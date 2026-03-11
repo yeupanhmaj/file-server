@@ -12,13 +12,21 @@ use utoipa::OpenApi;
         crate::endpoints::file::upload_chunk,
         crate::endpoints::file::download_file,
         crate::endpoints::file::delete_file,
-        crate::endpoints::file::sorted_list_file_and_folder
+        crate::endpoints::file::sorted_list_file_and_folder,
+        crate::endpoints::file::rename_file,
+        crate::endpoints::file::move_file,
+        crate::endpoints::file::copy_file,
+        crate::endpoints::file::list_trash,
+        crate::endpoints::file::restore_file,
+        crate::endpoints::file::empty_trash,
+        crate::endpoints::file::get_storage_stats_endpoint
     ),
     components(
         schemas(
             crate::models::CreateFolderRequest,
             crate::models::RenameFolderRequest,
             crate::models::SearchRequest,
+            crate::models::SearchResponse,
             crate::models::UploadFileRequest,
             crate::models::ChunkedUploadRequest,
             crate::models::ChunkedUploadResponse,
@@ -26,7 +34,13 @@ use utoipa::OpenApi;
             crate::models::DeleteFileRequest,
             crate::models::SortOptionRequest,
             crate::models::GetFolderByIdRequest,
-            crate::models::FileSystemItem
+            crate::models::FileSystemItem,
+            crate::models::RenameFileRequest,
+            crate::models::MoveFileRequest,
+            crate::models::CopyFileRequest,
+            crate::models::RestoreFileRequest,
+            crate::models::TrashItem,
+            crate::models::StorageStats
         )
     ),
     tags(

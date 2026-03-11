@@ -1,6 +1,7 @@
 use crate::models::{
-    ChunkedUploadResponse, DeleteFileRequest, DownloadFileRequest, FileSystemItem,
-    GetFolderByIdRequest, GetListFileAndFolderRequest, RestoreFileRequest, StorageStats, TrashItem,
+    ChunkedUploadResponse, CopyFileRequest, DeleteFileRequest, DownloadFileRequest, FileSystemItem,
+    GetFolderByIdRequest, GetListFileAndFolderRequest, MoveFileRequest, RenameFileRequest,
+    RestoreFileRequest, StorageStats, TrashItem,
 };
 use crate::utils::{
     generate_id_from_path, get_base_directory_canonical, get_storage_stats, get_trash_directory,
@@ -259,8 +260,6 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<String>, Statu
             .ok_or(StatusCode::BAD_REQUEST)?
             .to_string();
 
-        let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
-
         // Validate the folder path
         let safe_folder_path = validate_and_resolve_path(&folder_path)?;
         let file_path = safe_folder_path.join(&file_name);
@@ -273,9 +272,18 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<String>, Statu
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        tokio::fs::write(&file_path, &data)
+        // Stream file data directly to disk (memory-efficient)
+        let mut file = tokio::fs::File::create(&file_path)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        use tokio::io::AsyncWriteExt;
+        let mut stream = field;
+        while let Some(chunk) = stream.chunk().await.map_err(|_| StatusCode::BAD_REQUEST)? {
+            file.write_all(&chunk)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
 
         uploaded_files.push(file_name);
     }
@@ -1070,4 +1078,185 @@ pub async fn sorted_list_file_and_folder(
     items.sort();
 
     Ok(Json(items))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/rename-file",
+    request_body = RenameFileRequest,
+    responses(
+        (status = 200, description = "File renamed successfully", body = String),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 404, description = "File not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn rename_file(Json(req): Json<RenameFileRequest>) -> Result<Json<String>, StatusCode> {
+    let safe_path = validate_and_resolve_path(&req.file_path)?;
+
+    // Check if file exists
+    if !safe_path.exists() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Get parent directory
+    let parent = safe_path
+        .parent()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create new path with new name
+    let new_path = parent.join(&req.new_name);
+
+    // Validate the new path is still safe
+    validate_and_resolve_path(&new_path.to_string_lossy())?;
+
+    // Check if destination already exists
+    if new_path.exists() {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    // Rename the file
+    tokio::fs::rename(&safe_path, &new_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json("File renamed successfully".to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/move-file",
+    request_body = MoveFileRequest,
+    responses(
+        (status = 200, description = "File moved successfully", body = String),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 404, description = "File or destination not found"),
+        (status = 409, description = "File already exists at destination"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn move_file(Json(req): Json<MoveFileRequest>) -> Result<Json<String>, StatusCode> {
+    let safe_source = validate_and_resolve_path(&req.file_path)?;
+    let safe_dest_dir = validate_and_resolve_path(&req.destination)?;
+
+    // Check if source exists
+    if !safe_source.exists() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Check if destination directory exists
+    if !safe_dest_dir.exists() || !safe_dest_dir.is_dir() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Get filename from source
+    let filename = safe_source
+        .file_name()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create destination path
+    let destination = safe_dest_dir.join(filename);
+
+    // Check if file already exists at destination
+    if destination.exists() {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    // Move the file
+    tokio::fs::rename(&safe_source, &destination)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json("File moved successfully".to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/copy-file",
+    request_body = CopyFileRequest,
+    responses(
+        (status = 200, description = "File copied successfully", body = String),
+        (status = 403, description = "Forbidden - path outside allowed directory"),
+        (status = 404, description = "File or destination not found"),
+        (status = 409, description = "File already exists at destination"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn copy_file(Json(req): Json<CopyFileRequest>) -> Result<Json<String>, StatusCode> {
+    let safe_source = validate_and_resolve_path(&req.file_path)?;
+    let safe_dest_dir = validate_and_resolve_path(&req.destination)?;
+
+    // Check if source exists
+    if !safe_source.exists() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Check if destination directory exists
+    if !safe_dest_dir.exists() || !safe_dest_dir.is_dir() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Get filename from source
+    let filename = safe_source
+        .file_name()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create destination path
+    let destination = safe_dest_dir.join(filename);
+
+    // Check if file already exists at destination
+    if destination.exists() {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    // Copy the file (works for both files and directories)
+    if safe_source.is_dir() {
+        copy_dir_recursive(&safe_source, &destination).await?;
+    } else {
+        tokio::fs::copy(&safe_source, &destination)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json("File copied successfully".to_string()))
+}
+
+// Helper function to recursively copy directories
+fn copy_dir_recursive<'a>(
+    src: &'a std::path::Path,
+    dst: &'a std::path::Path,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), StatusCode>> + Send + 'a>> {
+    Box::pin(async move {
+        // Create destination directory
+        tokio::fs::create_dir_all(dst)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Read source directory
+        let mut entries = tokio::fs::read_dir(src)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        {
+            let src_path = entry.path();
+            let filename = entry.file_name();
+            let dst_path = dst.join(filename);
+
+            if src_path.is_dir() {
+                // Recursively copy subdirectory
+                copy_dir_recursive(&src_path, &dst_path).await?;
+            } else {
+                // Copy file
+                tokio::fs::copy(&src_path, &dst_path)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
+
+        Ok(())
+    })
 }

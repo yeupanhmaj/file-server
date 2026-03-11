@@ -14,9 +14,10 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use api_doc::ApiDoc;
 use endpoints::{
-    create_folder, delete_file, download_file, empty_trash, get_folder_by_id,
-    get_list_file_and_folder, get_storage_stats_endpoint, list_trash, rename_folder, restore_file,
-    search_files, sorted_list_file_and_folder, upload_chunk, upload_file,
+    copy_file, create_folder, delete_file, download_file, empty_trash, get_folder_by_id,
+    get_list_file_and_folder, get_storage_stats_endpoint, list_trash, move_file, rename_file,
+    rename_folder, restore_file, search_files, sorted_list_file_and_folder, upload_chunk,
+    upload_file,
 };
 
 #[tokio::main]
@@ -62,7 +63,10 @@ fn route_builder() -> Router {
         .route("/api/upload-chunk", post(upload_chunk))
         .route("/api/download", post(download_file))
         .route("/api/delete", post(delete_file))
+        .route("/api/rename-file", post(rename_file))
         .route("/api/rename-folder", post(rename_folder))
+        .route("/api/move-file", post(move_file))
+        .route("/api/copy-file", post(copy_file))
         .route("/api/trash", get(list_trash))
         .route("/api/trash/restore", post(restore_file))
         .route("/api/trash/empty", post(empty_trash))
